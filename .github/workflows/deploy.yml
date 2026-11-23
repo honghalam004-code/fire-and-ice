@@ -40,10 +40,11 @@ jobs:
           emcc -c rcore.c rshapes.c rtextures.c rtext.c rmodels.c raudio.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
           emar rcs libraylib.a *.o
 
-      - name: 4. Download Modern Font & Compile C++ to WebAssembly
+      - name: 4. Install Korean Font & Compile C++ to WebAssembly
         run: |
           source ./emsdk/emsdk_env.sh
-          curl -fL "https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf" -o font.ttf || cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf font.ttf
+          sudo apt-get update && sudo apt-get install -y fonts-nanum
+          cp "$(find /usr/share/fonts -name 'NanumGothicBold.ttf' | head -n 1)" font.ttf
           mkdir -p public
           em++ main.cpp -o public/index.html -Os -Wall \
             -I./raylib/src ./raylib/src/libraylib.a \
