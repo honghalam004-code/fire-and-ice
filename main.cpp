@@ -12,12 +12,13 @@
 #endif
 
 // ==========================================
-// 1. Constants & Enums
+// 1. Constants & Data Structures
 // ==========================================
 const int SCREEN_WIDTH = 1280;
 const int SCREEN_HEIGHT = 720;
 const float TILE_DIST = 96.0f;
 const float PLANET_RADIUS = 16.5f;
+const int STAGE_COUNT = 6;
 
 enum GameState {
     STATE_MENU,
@@ -36,7 +37,6 @@ enum Strictness {
 struct Tile {
     Vector2 pos;
     bool swirl = false;
-    float bpmMultiplier = 1.0f;
     bool midspin = false;
     bool checkpoint = false;
     bool cleared = false;
@@ -46,7 +46,6 @@ struct Tile {
 struct MapStep {
     float angleDeg;
     bool swirl = false;
-    float mult = 1.0f;
     bool midspin = false;
     bool checkpoint = false;
 };
@@ -66,6 +65,21 @@ struct Particle {
     float maxLife;
 };
 
+struct Shockwave {
+    Vector2 pos;
+    Color color;
+    float radius;
+    float maxRadius;
+    float alpha;
+};
+
+struct AmbientMote {
+    Vector2 pos;
+    Vector2 vel;
+    float size;
+    float phase;
+};
+
 struct JudgmentPopup {
     std::string text;
     Vector2 pos;
@@ -79,19 +93,42 @@ struct HitTick {
     float alpha;
 };
 
+struct StageMeta {
+    const char* code;
+    const char* title;
+    const char* subtitle;
+    float bpm;
+    int stars;
+    float hue;
+    bool cleared;
+    float bestAcc;
+};
+
 // ==========================================
-// 2. Global Game State
+// 2. Global State
 // ==========================================
+Font gameFont = { 0 };
 GameState state = STATE_MENU;
 Strictness strictness = STRICT_NORMAL;
 int selectedStage = 0;
 bool autoPlay = false;
 float audioOffsetMs = 0.0f;
 
+StageMeta stageMeta[STAGE_COUNT] = {
+    { "1-X", "A Dance of Fire",    "Steady Basics & Swirls", 120.0f, 1, 14.0f,  false, 0.0f },
+    { "2-X", "Waltz of Ice",       "Midspins & U-Turns",     128.0f, 2, 198.0f, false, 0.0f },
+    { "3-X", "Neon Metropolis",    "Syncopated Stairs",      135.0f, 3, 265.0f, false, 0.0f },
+    { "4-X", "Hexagonal Pulse",    "60-Deg Triplet Groove",  142.0f, 3, 152.0f, false, 0.0f },
+    { "5-X", "Solar Flare",        "Midspin & Stair Chains", 150.0f, 4, 34.0f,  false, 0.0f },
+    { "6-X", "Chrono Singularity", "Final Boss Rush",        158.0f, 5, 315.0f, false, 0.0f }
+};
+
 std::vector<Tile> tiles;
 std::deque<TrailPoint> fireTrail;
 std::deque<TrailPoint> iceTrail;
 std::vector<Particle> particles;
+std::vector<Shockwave> shockwaves;
+std::vector<AmbientMote> motes;
 std::vector<JudgmentPopup> popups;
 std::deque<HitTick> hitTicks;
 
@@ -101,8 +138,8 @@ Vector2 pivotPos = { 0, 0 };
 bool isFirePivot = true;
 bool cw = true;
 
-float baseBpm = 130.0f;
-float currentBpm = 130.0f;
+float baseBpm = 120.0f;
+float currentBpm = 120.0f;
 float currentAngle = 0.0f;
 float targetDiff = PI;
 float traveledAngle = 0.0f;
@@ -112,7 +149,7 @@ float beatTimer = 0.0f;
 int totalBeatCount = 0;
 float cameraBeatPulse = 0.0f;
 float screenShake = 0.0f;
-float bgHue = 225.0f;
+float bgHue = 14.0f;
 
 int hitCount = 0;
 int perfectCount = 0;
@@ -127,14 +164,25 @@ Sound sndKick;
 Sound sndSnare;
 Sound sndHat;
 Sound sndSwirl;
-Sound sndSpeedUp;
-Sound sndSpeedDown;
 Sound sndFail;
 Sound sndClear;
+Sound sndPad[4];
 
 // ==========================================
-// 3. Math & Audio Synthesizer
+// 3. Typography & Math Helpers
 // ==========================================
+void DrawTextUI(const char* text, float x, float y, float size, Color color, bool shadow = true) {
+    if (shadow) {
+        DrawTextEx(gameFont, text, { x + 2.0f, y + 2.0f }, size, 1.2f, Fade(BLACK, (color.a / 255.0f) * 0.65f));
+    }
+    DrawTextEx(gameFont, text, { x, y }, size, 1.2f, color);
+}
+
+void DrawTextCentered(const char* text, float centerX, float y, float size, Color color, bool shadow = true) {
+    Vector2 dim = MeasureTextEx(gameFont, text, size, 1.2f);
+    DrawTextUI(text, centerX - dim.x * 0.5f, y, size, color, shadow);
+}
+
 float NormalizeAngle(float a) {
     while (a < 0.0f) a += 2.0f * PI;
     while (a >= 2.0f * PI) a -= 2.0f * PI;
@@ -151,6 +199,9 @@ void GetJudgmentWindows(float& purePerfect, float& perfect, float& maxWindow) {
     }
 }
 
+// ==========================================
+// 4. Procedural Audio Synthesizer
+// ==========================================
 Sound SynthWave(int type, float freq, float duration, float volume) {
     int sampleRate = 44100;
     int count = (int)(sampleRate * duration);
@@ -162,29 +213,35 @@ Sound SynthWave(int type, float freq, float duration, float volume) {
 
         if (type == 0) {
             float env = expf(-t * 36.0f);
-            sample = sinf(2.0f * PI * freq * t) * 0.7f
-                   + sinf(2.0f * PI * (freq * 1.5f) * t) * 0.3f;
+            sample = sinf(2.0f * PI * freq * t) * 0.68f
+                   + sinf(2.0f * PI * (freq * 1.5f) * t) * 0.32f;
             sample *= env;
         }
         else if (type == 1) {
-            float env = expf(-t * 18.0f);
-            float f = freq * expf(-t * 22.0f) + 42.0f;
+            float env = expf(-t * 17.0f);
+            float f = freq * expf(-t * 22.0f) + 44.0f;
             sample = sinf(2.0f * PI * f * t) * env;
         }
         else if (type == 2) {
-            float env = expf(-t * (freq > 1000.0f ? 55.0f : 24.0f));
+            float env = expf(-t * (freq > 1000.0f ? 58.0f : 23.0f));
             float noise = ((float)GetRandomValue(-1000, 1000) / 1000.0f);
-            float tone = (freq < 1000.0f) ? sinf(2.0f * PI * 190.0f * t) * 0.4f : 0.0f;
-            sample = (noise * 0.75f + tone) * env;
+            float tone = (freq < 1000.0f) ? sinf(2.0f * PI * 185.0f * t) * 0.38f : 0.0f;
+            sample = (noise * 0.72f + tone) * env;
         }
         else if (type == 3) {
-            float env = expf(-t * 11.0f);
-            float f = freq + (duration > 0.25f ? -freq * 0.65f * (t / duration) : freq * 0.5f * (t / duration));
-            sample = (sinf(2.0f * PI * f * t) + 0.3f * sinf(4.0f * PI * f * t)) * env;
+            float env = expf(-t * 10.5f);
+            float f = freq + (duration > 0.25f ? -freq * 0.65f * (t / duration) : freq * 0.55f * (t / duration));
+            sample = (sinf(2.0f * PI * f * t) + 0.28f * sinf(4.0f * PI * f * t)) * env;
+        }
+        else if (type == 4) {
+            float attack = fminf(1.0f, t * 45.0f);
+            float env = attack * expf(-t * 6.5f);
+            sample = (sinf(2.0f * PI * freq * t) * 0.55f
+                    + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.25f
+                    + sinf(2.0f * PI * (freq * 0.5f) * t) * 0.20f) * env;
         }
 
-        if (sample > 1.0f) sample = 1.0f;
-        if (sample < -1.0f) sample = -1.0f;
+        sample = Clamp(sample, -1.0f, 1.0f);
         data[i] = (short)(sample * 32767.0f * volume);
     }
 
@@ -197,70 +254,121 @@ Sound SynthWave(int type, float freq, float duration, float volume) {
 void EnsureAudioInitialized() {
     if (audioReady) return;
     InitAudioDevice();
-    sndHit       = SynthWave(0, 587.33f, 0.11f, 0.75f);
-    sndKick      = SynthWave(1, 150.00f, 0.18f, 0.65f);
-    sndSnare     = SynthWave(2, 400.00f, 0.14f, 0.40f);
-    sndHat       = SynthWave(2, 2500.0f, 0.05f, 0.22f);
-    sndSwirl     = SynthWave(3, 440.00f, 0.15f, 0.50f);
-    sndSpeedUp   = SynthWave(3, 660.00f, 0.16f, 0.55f);
-    sndSpeedDown = SynthWave(3, 330.00f, 0.20f, 0.55f);
-    sndFail      = SynthWave(3, 160.00f, 0.40f, 0.80f);
-    sndClear     = SynthWave(0, 880.00f, 0.45f, 0.80f);
+    sndHit   = SynthWave(0, 587.33f, 0.11f, 0.75f);
+    sndKick  = SynthWave(1, 152.00f, 0.18f, 0.65f);
+    sndSnare = SynthWave(2, 400.00f, 0.14f, 0.36f);
+    sndHat   = SynthWave(2, 2600.0f, 0.05f, 0.20f);
+    sndSwirl = SynthWave(3, 440.00f, 0.15f, 0.48f);
+    sndFail  = SynthWave(3, 155.00f, 0.42f, 0.80f);
+    sndClear = SynthWave(0, 880.00f, 0.48f, 0.80f);
+
+    float padFreqs[4] = { 220.00f, 261.63f, 329.63f, 392.00f };
+    for (int i = 0; i < 4; i++) {
+        sndPad[i] = SynthWave(4, padFreqs[i], 0.42f, 0.26f);
+    }
     audioReady = true;
 }
 
 // ==========================================
-// 4. Stage Level Builder
+// 5. Six Steady-BPM Stage Definitions
 // ==========================================
 void BuildStage(int stageIdx) {
     tiles.clear();
     std::vector<MapStep> steps;
+    baseBpm = stageMeta[stageIdx].bpm;
+    bgHue   = stageMeta[stageIdx].hue;
 
     if (stageIdx == 0) {
-        baseBpm = 128.0f;
-        bgHue = 225.0f;
+        // 1-X: A Dance of Fire (120 BPM Constant)
         steps = {
             {0}, {0}, {0}, {0},
             {-90}, {0}, {-90}, {0},
             {90}, {0}, {90}, {0},
             {0, true}, {0}, {0}, {0},
-            {-90, false, 1.0f, false, true}, {0}, {90}, {0},
-            {-45}, {45}, {-45}, {45},
-            {0, false, 1.25f}, {0}, {-90}, {0},
-            {90, false, 0.8f}, {0}, {0}, {0}
+            {90, false, false, true}, {0}, {90}, {0},
+            {-90}, {0}, {-90}, {0},
+            {0, true}, {0}, {-45}, {45}, {-45}, {45},
+            {0}, {0}, {-90}, {0},
+            {90}, {0}, {0}, {0}
         };
     }
     else if (stageIdx == 1) {
-        baseBpm = 142.0f;
-        bgHue = 198.0f;
+        // 2-X: Waltz of Ice (128 BPM Constant)
         steps = {
             {0}, {0}, {-90}, {0},
-            {-90, false, 1.0f, true}, {0}, {90, false, 1.0f, true}, {0},
+            {-90, false, true}, {0}, {90, false, true}, {0},
             {0, true}, {0}, {-45}, {-90}, {-45}, {0},
-            {0, false, 1.0f, false, true},
+            {0, false, false, true},
             {180}, {0},
-            {0, false, 1.35f}, {-90}, {0}, {90}, {0},
-            {-45, true}, {45}, {-45}, {45},
-            {0, false, 1.0f / 1.35f}, {0}, {0}, {0}
+            {-45}, {45}, {-45}, {45},
+            {-90, false, true}, {0}, {-90, false, true}, {0},
+            {0, true}, {0}, {90}, {0}, {90}, {0},
+            {0}, {0}, {-90}, {0},
+            {0}, {0}, {0}, {0}
+        };
+    }
+    else if (stageIdx == 2) {
+        // 3-X: Neon Metropolis (135 BPM Constant)
+        steps = {
+            {0}, {-90}, {0}, {90}, {0},
+            {0}, {0}, {-90}, {0}, {-90}, {0},
+            {0, false, false, true},
+            {0, true}, {0}, {90}, {0}, {90}, {0},
+            {-90, false, true}, {0}, {90, false, true}, {0},
+            {0}, {0}, {180}, {0},
+            {0, false, false, true},
+            {0}, {-45}, {45}, {-45}, {45}, {-90}, {0},
+            {0}, {0, true}, {0}, {0}
+        };
+    }
+    else if (stageIdx == 3) {
+        // 4-X: Hexagonal Pulse (142 BPM Constant)
+        steps = {
+            {0}, {0}, {-60}, {0}, {60}, {0},
+            {-60}, {-120}, {-60}, {0},
+            {0, true}, {0}, {60}, {120}, {60}, {0},
+            {0, false, false, true},
+            {-60, false, true}, {0}, {60, false, true}, {0},
+            {0}, {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
+            {0, false, false, true},
+            {180, true}, {0}, {-60}, {60}, {-60}, {60},
+            {0, true}, {0}, {0}, {0}
+        };
+    }
+    else if (stageIdx == 4) {
+        // 5-X: Solar Flare (150 BPM Constant)
+        steps = {
+            {0}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
+            {-90, false, true}, {0}, {-90, false, true}, {0},
+            {0, true}, {90, false, true}, {0}, {90, false, true}, {0},
+            {0, false, false, true},
+            {0}, {0}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
+            {0, false, false, true},
+            {-45, true}, {45}, {-45}, {45}, {-90}, {0}, {90}, {0},
+            {180}, {0}, {-90, false, true}, {0},
+            {0, true}, {0}, {0}, {0}
         };
     }
     else {
-        baseBpm = 160.0f;
-        bgHue = 275.0f;
+        // 6-X: Chrono Singularity (158 BPM Constant)
         steps = {
             {0}, {-90}, {0}, {90}, {0},
             {0, true}, {-90, true}, {0, true}, {90, true},
-            {0, false, 1.4f}, {0}, {-45}, {45}, {-45}, {45},
-            {0, false, 1.0f / 1.4f, false, true},
-            {-90, false, 1.0f, true}, {0}, {-90, false, 1.0f, true}, {0},
-            {180, true}, {0},
-            {0, false, 1.5f}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
-            {0, false, 1.0f / 1.5f}, {0}, {0}
+            {-90, false, true}, {0}, {-90, false, true}, {0},
+            {0, false, false, true},
+            {0}, {-45}, {45}, {-45}, {45}, {-90}, {0}, {-90}, {0},
+            {0, false, false, true},
+            {180, true}, {0}, {180, true}, {0},
+            {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
+            {0, false, false, true},
+            {0}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
+            {-90, false, true}, {0}, {90, false, true}, {0},
+            {0}, {0, true}, {0}, {0}
         };
     }
 
     Vector2 curPos = { 0.0f, 0.0f };
-    tiles.push_back({ curPos, false, 1.0f, false, false, true, 0.0f });
+    tiles.push_back({ curPos, false, false, false, true, 0.0f });
 
     Vector2 buildPivot = curPos;
     for (size_t i = 0; i < steps.size(); i++) {
@@ -272,7 +380,6 @@ void BuildStage(int stageIdx) {
         tiles.push_back({
             nextPos,
             steps[i].swirl,
-            steps[i].mult,
             steps[i].midspin,
             steps[i].checkpoint,
             false,
@@ -285,13 +392,25 @@ void BuildStage(int stageIdx) {
 }
 
 // ==========================================
-// 5. Orbit & Hit Effects
+// 6. Visual Effects & Orbit Logic
 // ==========================================
+void InitAmbientMotes() {
+    motes.clear();
+    for (int i = 0; i < 48; i++) {
+        motes.push_back({
+            { (float)GetRandomValue(0, SCREEN_WIDTH), (float)GetRandomValue(0, SCREEN_HEIGHT) },
+            { (float)GetRandomValue(-18, 18), (float)GetRandomValue(-28, -8) },
+            (float)GetRandomValue(2, 5),
+            (float)GetRandomValue(0, 628) / 100.0f
+        });
+    }
+}
+
 void SpawnHitParticles(Vector2 pos, Color col, int count) {
     for (int i = 0; i < count; i++) {
         float ang = (float)GetRandomValue(0, 360) * DEG2RAD;
-        float spd = (float)GetRandomValue(90, 320);
-        float life = (float)GetRandomValue(25, 50) / 100.0f;
+        float spd = (float)GetRandomValue(85, 340);
+        float life = (float)GetRandomValue(28, 55) / 100.0f;
         particles.push_back({
             pos,
             { cosf(ang) * spd, sinf(ang) * spd },
@@ -303,8 +422,12 @@ void SpawnHitParticles(Vector2 pos, Color col, int count) {
     }
 }
 
+void SpawnShockwave(Vector2 pos, Color col, float maxRad = 85.0f) {
+    shockwaves.push_back({ pos, col, 18.0f, maxRad, 0.85f });
+}
+
 void AddPopup(const std::string& msg, Vector2 pos, Color col) {
-    popups.push_back({ msg, { pos.x, pos.y - 42.0f }, col, 0.75f });
+    popups.push_back({ msg, { pos.x, pos.y - 44.0f }, col, 0.75f });
 }
 
 void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
@@ -314,10 +437,11 @@ void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
         float startAng = atan2f(currTarget.y - pivotPos.y, currTarget.x - pivotPos.x);
         float endAng   = atan2f(nextTarget.y - pivotPos.y, nextTarget.x - pivotPos.x);
 
-        if (tiles[index].swirl) { cw = !cw; if (audioReady) PlaySound(sndSwirl); }
-        if (tiles[index].bpmMultiplier > 1.05f && audioReady) PlaySound(sndSpeedUp);
-        if (tiles[index].bpmMultiplier < 0.95f && audioReady) PlaySound(sndSpeedDown);
-        currentBpm *= tiles[index].bpmMultiplier;
+        if (tiles[index].swirl) {
+            cw = !cw;
+            SpawnShockwave(tiles[index].pos, MAGENTA, 95.0f);
+            if (audioReady) PlaySound(sndSwirl);
+        }
 
         float diff = cw ? NormalizeAngle(endAng - startAng) : NormalizeAngle(startAng - endAng);
         if (diff < 0.05f) diff += 2.0f * PI;
@@ -341,11 +465,9 @@ void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
 
     if (tiles[index].swirl) {
         cw = !cw;
+        if (state == STATE_PLAYING) SpawnShockwave(pivotPos, MAGENTA, 95.0f);
         if (audioReady && state == STATE_PLAYING) PlaySound(sndSwirl);
     }
-    if (tiles[index].bpmMultiplier > 1.05f && audioReady && state == STATE_PLAYING) PlaySound(sndSpeedUp);
-    if (tiles[index].bpmMultiplier < 0.95f && audioReady && state == STATE_PLAYING) PlaySound(sndSpeedDown);
-    currentBpm *= tiles[index].bpmMultiplier;
 
     float diff = cw ? NormalizeAngle(endAng - startAng) : NormalizeAngle(startAng - endAng);
     if (diff < 0.05f) diff += 2.0f * PI;
@@ -362,6 +484,7 @@ void StartStage(int stageIdx, int startFromTile = 0) {
     fireTrail.clear();
     iceTrail.clear();
     particles.clear();
+    shockwaves.clear();
     popups.clear();
     hitTicks.clear();
 
@@ -378,9 +501,8 @@ void StartStage(int stageIdx, int startFromTile = 0) {
     Vector2 prevPiv = { 0, 0 };
     for (int i = 0; i <= startFromTile; i++) {
         tiles[i].cleared = true;
-        if (i > 0) {
-            if (tiles[i].swirl) cw = !cw;
-            currentBpm *= tiles[i].bpmMultiplier;
+        if (i > 0 && tiles[i].swirl) {
+            cw = !cw;
         }
         if (!tiles[i].midspin) {
             if (i > 0) prevPiv = pivotPos;
@@ -400,6 +522,7 @@ void StartStage(int stageIdx, int startFromTile = 0) {
     camera.zoom = 1.0f;
     state = STATE_COUNTDOWN;
     PlaySound(sndKick);
+    PlaySound(sndPad[0]);
 }
 
 bool IsHitKeyPressed() {
@@ -409,7 +532,7 @@ bool IsHitKeyPressed() {
 }
 
 // ==========================================
-// 6. Main Update & Render Loop
+// 7. Main Update & Render Loop
 // ==========================================
 void UpdateAndDrawFrame() {
     float dt = GetFrameTime();
@@ -419,17 +542,51 @@ void UpdateAndDrawFrame() {
     if (IsKeyPressed(KEY_LEFT_BRACKET))  audioOffsetMs = fmaxf(-150.0f, audioOffsetMs - 5.0f);
     if (IsKeyPressed(KEY_RIGHT_BRACKET)) audioOffsetMs = fminf(150.0f, audioOffsetMs + 5.0f);
 
+    for (auto& m : motes) {
+        m.pos = Vector2Add(m.pos, Vector2Scale(m.vel, dt));
+        m.phase += 2.2f * dt;
+        if (m.pos.y < -10) m.pos.y = SCREEN_HEIGHT + 10;
+        if (m.pos.x < -10) m.pos.x = SCREEN_WIDTH + 10;
+        if (m.pos.x > SCREEN_WIDTH + 10) m.pos.x = -10;
+    }
+
     float angularSpeed = PI * (currentBpm / 60.0f);
     float beatDuration = 60.0f / currentBpm;
 
     if (state == STATE_MENU) {
-        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))  selectedStage = (selectedStage + 2) % 3;
-        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) selectedStage = (selectedStage + 1) % 3;
+        bgHue = Lerp(bgHue, stageMeta[selectedStage].hue, 1.0f - expf(-5.0f * dt));
+
+        if (IsKeyPressed(KEY_LEFT)  || IsKeyPressed(KEY_A)) selectedStage = (selectedStage + STAGE_COUNT - 1) % STAGE_COUNT;
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) selectedStage = (selectedStage + 1) % STAGE_COUNT;
+        if (IsKeyPressed(KEY_UP)    || IsKeyPressed(KEY_W)) selectedStage = (selectedStage + STAGE_COUNT - 3) % STAGE_COUNT;
+        if (IsKeyPressed(KEY_DOWN)  || IsKeyPressed(KEY_S)) selectedStage = (selectedStage + 3) % STAGE_COUNT;
+
         if (IsKeyPressed(KEY_ONE))   strictness = STRICT_LENIENT;
         if (IsKeyPressed(KEY_TWO))   strictness = STRICT_NORMAL;
         if (IsKeyPressed(KEY_THREE)) strictness = STRICT_STRICT;
 
-        if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 mp = GetMousePosition();
+            bool clickedCard = false;
+            for (int i = 0; i < STAGE_COUNT; i++) {
+                int col = i % 3;
+                int row = i / 3;
+                Rectangle card = { 130.0f + col * 345.0f, 225.0f + row * 145.0f, 325.0f, 125.0f };
+                if (CheckCollisionPointRec(mp, card)) {
+                    clickedCard = true;
+                    if (selectedStage == i) {
+                        StartStage(selectedStage, 0);
+                    } else {
+                        selectedStage = i;
+                    }
+                    break;
+                }
+            }
+            if (!clickedCard) {
+                StartStage(selectedStage, 0);
+            }
+        }
+        else if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
             StartStage(selectedStage, 0);
         }
     }
@@ -448,6 +605,7 @@ void UpdateAndDrawFrame() {
             } else {
                 traveledAngle = 0.0f;
                 PlaySound(sndKick);
+                PlaySound(sndPad[(selectedStage) % 4]);
                 state = STATE_PLAYING;
             }
         }
@@ -461,8 +619,12 @@ void UpdateAndDrawFrame() {
             beatTimer -= beatDuration * 0.5f;
             totalBeatCount++;
             if (totalBeatCount % 2 == 0) {
-                cameraBeatPulse = 0.04f;
-                PlaySound((totalBeatCount / 2) % 2 == 0 ? sndKick : sndSnare);
+                int beatIdx = totalBeatCount / 2;
+                cameraBeatPulse = 0.038f;
+                PlaySound(beatIdx % 2 == 0 ? sndKick : sndSnare);
+                if (beatIdx % 2 == 0) {
+                    PlaySound(sndPad[(beatIdx / 2 + selectedStage) % 4]);
+                }
             } else {
                 PlaySound(sndHat);
             }
@@ -489,33 +651,35 @@ void UpdateAndDrawFrame() {
                 float accVal = 1.0f;
 
                 if (autoPlay || fabsf(errorSec) <= pureWin) {
-                    jText = "PERFECT!"; jCol = { 80, 255, 120, 255 }; accVal = 1.0f; perfectCount++;
+                    jText = "PURE PERFECT!"; jCol = { 70, 255, 195, 255 }; accVal = 1.0f; perfectCount++;
                 } else if (errorSec < 0) {
-                    if (fabsf(errorSec) <= perfWin) { jText = "EARLY"; jCol = GOLD; accVal = 0.75f; }
-                    else { jText = "TOO EARLY"; jCol = ORANGE; accVal = 0.45f; }
+                    if (fabsf(errorSec) <= perfWin) { jText = "EARLY"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
+                    else { jText = "TOO EARLY"; jCol = GOLD; accVal = 0.55f; }
                 } else {
-                    if (fabsf(errorSec) <= perfWin) { jText = "LATE"; jCol = GOLD; accVal = 0.75f; }
-                    else { jText = "TOO LATE"; jCol = ORANGE; accVal = 0.45f; }
+                    if (fabsf(errorSec) <= perfWin) { jText = "LATE"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
+                    else { jText = "TOO LATE"; jCol = GOLD; accVal = 0.55f; }
                 }
 
                 hitCount++;
                 accuracySum += accVal;
                 hitTicks.push_back({ autoPlay ? 0.0f : errMs, jCol, 1.0f });
-                if (hitTicks.size() > 24) hitTicks.pop_front();
+                if (hitTicks.size() > 26) hitTicks.pop_front();
 
                 Vector2 hitTilePos = tiles[currentTile + 1].pos;
                 AddPopup(jText, hitTilePos, jCol);
-                SpawnHitParticles(hitTilePos, isFirePivot ? SKYBLUE : ORANGE, 16);
+                SpawnHitParticles(hitTilePos, isFirePivot ? SKYBLUE : ORANGE, 18);
+                SpawnShockwave(hitTilePos, jCol, 72.0f);
                 PlaySound(sndHit);
 
-                screenShake = 5.5f;
+                screenShake = 5.0f;
                 currentTile++;
                 tiles[currentTile].cleared = true;
                 tiles[currentTile].hitAnim = 1.0f;
 
                 if (tiles[currentTile].checkpoint) {
                     lastCheckpoint = currentTile;
-                    AddPopup("CHECKPOINT!", hitTilePos, SKYBLUE);
+                    AddPopup("CHECKPOINT!", hitTilePos, GREEN);
+                    SpawnShockwave(hitTilePos, GREEN, 110.0f);
                 }
 
                 if (!tiles[currentTile].midspin) {
@@ -523,7 +687,15 @@ void UpdateAndDrawFrame() {
                 }
 
                 if (currentTile >= (int)tiles.size() - 1) {
+                    float finalAcc = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
+                    if (!autoPlay) {
+                        stageMeta[selectedStage].cleared = true;
+                        if (finalAcc > stageMeta[selectedStage].bestAcc) {
+                            stageMeta[selectedStage].bestAcc = finalAcc;
+                        }
+                    }
                     PlaySound(sndClear);
+                    SpawnShockwave(hitTilePos, GOLD, 160.0f);
                     state = STATE_CLEAR;
                 } else {
                     Vector2 oldPivot = pivotPos;
@@ -533,7 +705,8 @@ void UpdateAndDrawFrame() {
                 PlaySound(sndFail);
                 screenShake = 16.0f;
                 failReason = "TOO EARLY! (OVERLOAD)";
-                SpawnHitParticles(pivotPos, RED, 28);
+                SpawnHitParticles(pivotPos, RED, 32);
+                SpawnShockwave(pivotPos, RED, 120.0f);
                 state = STATE_GAMEOVER;
             }
         }
@@ -541,7 +714,8 @@ void UpdateAndDrawFrame() {
             PlaySound(sndFail);
             screenShake = 16.0f;
             failReason = "MISSED THE BEAT!";
-            SpawnHitParticles(tiles[currentTile + 1].pos, RED, 28);
+            SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
+            SpawnShockwave(tiles[currentTile + 1].pos, RED, 120.0f);
             state = STATE_GAMEOVER;
         }
     }
@@ -552,11 +726,14 @@ void UpdateAndDrawFrame() {
     }
     else if (state == STATE_CLEAR) {
         if (IsKeyPressed(KEY_ESCAPE)) { state = STATE_MENU; }
-        else if (IsHitKeyPressed())   { StartStage((selectedStage + 1) % 3, 0); }
+        else if (IsHitKeyPressed())   {
+            selectedStage = (selectedStage + 1) % STAGE_COUNT;
+            StartStage(selectedStage, 0);
+        }
     }
 
     if (!tiles.empty() && state != STATE_MENU) {
-        camera.target = Vector2Lerp(camera.target, pivotPos, 1.0f - expf(-8.5f * dt));
+        camera.target = Vector2Lerp(camera.target, pivotPos, 1.0f - expf(-9.0f * dt));
         cameraBeatPulse = Lerp(cameraBeatPulse, 0.0f, 1.0f - expf(-12.0f * dt));
         camera.zoom = 1.0f + cameraBeatPulse;
 
@@ -579,18 +756,23 @@ void UpdateAndDrawFrame() {
         icePos  = isFirePivot ? orbitPos : pivotPos;
 
         if (state == STATE_PLAYING || state == STATE_COUNTDOWN) {
-            fireTrail.push_back({ firePos, { 255, 75, 45, 255 }, 0.75f });
-            iceTrail.push_back({ icePos, { 45, 200, 255, 255 }, 0.75f });
-            if (fireTrail.size() > 22) fireTrail.pop_front();
-            if (iceTrail.size() > 22) iceTrail.pop_front();
+            fireTrail.push_back({ firePos, { 255, 80, 45, 255 }, 0.78f });
+            iceTrail.push_back({ icePos, { 45, 205, 255, 255 }, 0.78f });
+            if (fireTrail.size() > 24) fireTrail.pop_front();
+            if (iceTrail.size() > 24) iceTrail.pop_front();
         }
     }
 
-    for (auto& t : tiles) if (t.hitAnim > 0.0f) t.hitAnim = fmaxf(0.0f, t.hitAnim - 4.0f * dt);
+    for (auto& t : tiles) if (t.hitAnim > 0.0f) t.hitAnim = fmaxf(0.0f, t.hitAnim - 4.2f * dt);
     for (auto& tr : fireTrail) tr.alpha *= 0.89f;
     for (auto& tr : iceTrail)  tr.alpha *= 0.89f;
     for (auto& tk : hitTicks)  tk.alpha = fmaxf(0.15f, tk.alpha - 0.12f * dt);
 
+    for (int i = (int)shockwaves.size() - 1; i >= 0; i--) {
+        shockwaves[i].radius = Lerp(shockwaves[i].radius, shockwaves[i].maxRadius, 1.0f - expf(-9.0f * dt));
+        shockwaves[i].alpha -= 1.8f * dt;
+        if (shockwaves[i].alpha <= 0.0f) shockwaves.erase(shockwaves.begin() + i);
+    }
     for (int i = (int)particles.size() - 1; i >= 0; i--) {
         particles[i].pos = Vector2Add(particles[i].pos, Vector2Scale(particles[i].vel, dt));
         particles[i].vel = Vector2Scale(particles[i].vel, 0.92f);
@@ -604,36 +786,57 @@ void UpdateAndDrawFrame() {
     }
 
     // ==========================================
-    // 7. Rendering
+    // 8. Rendering
     // ==========================================
     BeginDrawing();
-    Color bgCol = ColorFromHSV(bgHue, 0.42f, 0.11f + cameraBeatPulse * 0.6f);
+    Color bgCol = ColorFromHSV(bgHue, 0.45f, 0.10f + cameraBeatPulse * 0.55f);
     ClearBackground(bgCol);
 
-    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 260.0f + cameraBeatPulse * 400.0f, Fade(WHITE, 0.04f));
-    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 440.0f + cameraBeatPulse * 600.0f, Fade(WHITE, 0.03f));
+    for (const auto& m : motes) {
+        float pulseAlpha = 0.12f + 0.08f * sinf(m.phase);
+        DrawCircleV(m.pos, m.size, Fade(ColorFromHSV(bgHue, 0.5f, 0.95f), pulseAlpha));
+    }
+    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 250.0f + cameraBeatPulse * 420.0f, Fade(WHITE, 0.045f));
+    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 450.0f + cameraBeatPulse * 620.0f, Fade(WHITE, 0.03f));
 
     if (state == STATE_MENU) {
-        DrawText("A DANCE OF FIRE AND ICE", 275, 130, 52, WHITE);
-        DrawText("C++ WebAssembly Rhythm Engine", 435, 195, 24, SKYBLUE);
+        DrawTextCentered("A DANCE OF FIRE AND ICE", SCREEN_WIDTH / 2.0f, 65.0f, 54.0f, WHITE);
+        DrawTextCentered("C++ WEBASSEMBLY RHYTHM ENGINE", SCREEN_WIDTH / 2.0f, 128.0f, 20.0f, ColorFromHSV(bgHue, 0.55f, 0.95f));
 
-        const char* stageNames[3] = {
-            "1-X  A Dance of Fire (128 BPM) - Basics & Swirls",
-            "2-X  Waltz of Ice (142 BPM) - Midspins & U-Turns",
-            "3-X  Spacetime Vortex (160 BPM) - Speed Rush"
-        };
-        for (int i = 0; i < 3; i++) {
-            int y = 275 + i * 68;
+        for (int i = 0; i < STAGE_COUNT; i++) {
+            int col = i % 3;
+            int row = i / 3;
+            float cx = 130.0f + col * 345.0f;
+            float cy = 225.0f + row * 145.0f;
             bool sel = (i == selectedStage);
-            DrawRectangleRounded({ 310.0f, (float)y, 660.0f, 52.0f }, 0.25f, 8, sel ? Fade(SKYBLUE, 0.28f) : Fade(WHITE, 0.06f));
-            if (sel) DrawRectangleLines(310, y, 660, 52, SKYBLUE);
-            DrawText(stageNames[i], 340, y + 15, 22, sel ? WHITE : LIGHTGRAY);
+            Color themeCol = ColorFromHSV(stageMeta[i].hue, 0.65f, 0.95f);
+
+            DrawRectangleRounded({ cx + 4, cy + 6, 325.0f, 125.0f }, 0.16f, 8, Fade(BLACK, 0.45f));
+            DrawRectangleRounded({ cx, cy, 325.0f, 125.0f }, 0.16f, 8,
+                                 sel ? Fade(themeCol, 0.24f) : Fade(WHITE, 0.06f));
+            DrawRectangleRoundedLinesEx({ cx, cy, 325.0f, 125.0f }, 0.16f, 8, sel ? 2.5f : 1.0f,
+                                        sel ? themeCol : Fade(WHITE, 0.18f));
+
+            DrawTextUI(stageMeta[i].code, cx + 18, cy + 14, 28.0f, themeCol);
+            DrawTextUI(TextFormat("%.0f BPM", stageMeta[i].bpm), cx + 225, cy + 18, 18.0f, LIGHTGRAY);
+            DrawTextUI(stageMeta[i].title, cx + 18, cy + 48, 22.0f, sel ? WHITE : LIGHTGRAY);
+            DrawTextUI(stageMeta[i].subtitle, cx + 18, cy + 76, 16.0f, GRAY);
+
+            std::string starsStr = "";
+            for (int s = 0; s < 5; s++) starsStr += (s < stageMeta[i].stars) ? "*" : "-";
+            DrawTextUI(TextFormat("DIFF: %s", starsStr.c_str()), cx + 18, cy + 98, 15.0f, GOLD);
+
+            if (stageMeta[i].cleared) {
+                DrawTextUI(TextFormat("CLEAR %.1f%%", stageMeta[i].bestAcc), cx + 195, cy + 98, 15.0f, GREEN);
+            }
         }
 
         const char* strictNames[3] = { "LENIENT [1]", "NORMAL [2]", "STRICT [3]" };
-        DrawText(TextFormat("Judgment: %s   |   Autoplay: %s [TAB]   |   Offset: %.0f ms ([ / ])",
-                 strictNames[strictness], autoPlay ? "ON" : "OFF", audioOffsetMs), 255, 515, 20, GOLD);
-        DrawText("Use LEFT/RIGHT to Select Stage, Press [SPACE] or [CLICK] to Start", 270, 580, 22, WHITE);
+        DrawTextCentered(TextFormat("JUDGMENT: %s    |    AUTOPLAY: %s [TAB]    |    OFFSET: %.0f ms ([ / ])",
+                         strictNames[strictness], autoPlay ? "ON" : "OFF", audioOffsetMs),
+                         SCREEN_WIDTH / 2.0f, 545.0f, 20.0f, GOLD);
+        DrawTextCentered("Select a Stage with Arrow Keys or Mouse, Press [SPACE] to Play",
+                         SCREEN_WIDTH / 2.0f, 595.0f, 22.0f, WHITE);
         EndDrawing();
         return;
     }
@@ -644,44 +847,61 @@ void UpdateAndDrawFrame() {
         for (size_t i = 0; i + 1 < tiles.size(); i++) {
             Vector2 p1 = renderPivot;
             Vector2 p2 = tiles[i + 1].pos;
-            Color borderCol = tiles[i].cleared ? Color{ 85, 115, 165, 255 } : Color{ 50, 62, 92, 255 };
-            Color coreCol   = tiles[i].cleared ? Color{ 38, 52, 78, 255 }   : Color{ 24, 30, 46, 255 };
+            Color borderCol = tiles[i].cleared ? Color{ 95, 130, 185, 255 } : Color{ 52, 65, 98, 255 };
+            Color coreCol   = tiles[i].cleared ? Color{ 38, 54, 82, 255 }  : Color{ 22, 28, 44, 255 };
+            DrawLineEx({ p1.x, p1.y + 6.0f }, { p2.x, p2.y + 6.0f }, 50.0f, Fade(BLACK, 0.35f));
             DrawLineEx(p1, p2, 48.0f, borderCol);
-            DrawLineEx(p1, p2, 38.0f, coreCol);
+            DrawLineEx(p1, p2, 36.0f, coreCol);
             if (!tiles[i + 1].midspin) {
                 renderPivot = tiles[i + 1].pos;
             }
         }
 
+        DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.16f));
+        if (state == STATE_PLAYING) {
+            float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
+            float startDeg = currentAngle * RAD2DEG;
+            float endDeg   = (currentAngle + (cw ? 1.0f : -1.0f) * targetDiff * remRatio) * RAD2DEG;
+            DrawRing(pivotPos, TILE_DIST - 6.0f, TILE_DIST + 2.0f, startDeg, endDeg, 24,
+                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.22f));
+        }
+
+        float timeNow = (float)GetTime();
         for (size_t i = 0; i < tiles.size(); i++) {
             float scale = 1.0f + tiles[i].hitAnim * 0.28f;
             Color rimCol = (i == (size_t)currentTile) ? WHITE :
-                           (tiles[i].cleared ? Color{ 100, 135, 190, 255 } : Color{ 68, 82, 115, 255 });
+                           (tiles[i].cleared ? Color{ 110, 150, 210, 255 } : Color{ 70, 86, 122, 255 });
             if (i == tiles.size() - 1) rimCol = GOLD;
 
             if (tiles[i].midspin) {
-                DrawPoly(tiles[i].pos, 3, 25.0f * scale, (float)GetTime() * 60.0f, MAGENTA);
-                DrawPoly(tiles[i].pos, 3, 16.0f * scale, (float)GetTime() * 60.0f, { 28, 32, 48, 255 });
+                DrawPoly(tiles[i].pos, 3, 26.0f * scale, timeNow * 70.0f, MAGENTA);
+                DrawPoly(tiles[i].pos, 3, 16.0f * scale, timeNow * 70.0f, { 26, 30, 46, 255 });
             } else {
-                DrawCircleV(tiles[i].pos, 24.0f * scale, rimCol);
-                DrawCircleV(tiles[i].pos, 18.5f * scale, { 24, 28, 42, 255 });
+                DrawCircleV({ tiles[i].pos.x, tiles[i].pos.y + 4.0f }, 24.0f * scale, Fade(BLACK, 0.35f));
+                DrawCircleV(tiles[i].pos, 24.5f * scale, rimCol);
+                DrawCircleV(tiles[i].pos, 18.0f * scale, { 22, 26, 40, 255 });
+            }
+
+            if (i == tiles.size() - 1) {
+                DrawRing(tiles[i].pos, 11.0f, 15.0f, timeNow * 140.0f, timeNow * 140.0f + 240.0f, 24, GOLD);
+                DrawCircleV(tiles[i].pos, 7.0f + 2.0f * sinf(timeNow * 6.0f), WHITE);
             }
 
             if (tiles[i].swirl) {
-                float rot = (float)GetTime() * 180.0f;
-                DrawRing(tiles[i].pos, 9.5f, 13.5f, rot, rot + 260.0f, 20, { 235, 90, 255, 255 });
+                float rot = timeNow * 200.0f;
+                DrawRing(tiles[i].pos, 9.0f, 13.5f, rot, rot + 140.0f, 16, { 240, 95, 255, 255 });
+                DrawRing(tiles[i].pos, 9.0f, 13.5f, rot + 180.0f, rot + 320.0f, 16, { 240, 95, 255, 255 });
             }
-            if (tiles[i].bpmMultiplier > 1.05f) {
-                DrawPoly(tiles[i].pos, 3, 10.0f, 0.0f, RED);
-            } else if (tiles[i].bpmMultiplier < 0.95f) {
-                DrawPoly(tiles[i].pos, 3, 10.0f, 180.0f, SKYBLUE);
-            }
+
             if (tiles[i].checkpoint) {
-                DrawCircleLinesV(tiles[i].pos, 29.0f, GREEN);
+                DrawCircleLinesV(tiles[i].pos, 29.5f, GREEN);
+                DrawCircleLinesV(tiles[i].pos, 32.5f, Fade(GREEN, 0.45f));
             }
         }
 
-        DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.16f));
+        for (const auto& sw : shockwaves) {
+            DrawRing(sw.pos, sw.radius - 3.0f, sw.radius, 0, 360, 32, Fade(sw.color, sw.alpha));
+        }
 
         for (size_t i = 0; i < fireTrail.size(); i++) {
             float r = PLANET_RADIUS * ((float)i / fireTrail.size());
@@ -696,35 +916,39 @@ void UpdateAndDrawFrame() {
             DrawCircleV(pt.pos, pt.size * (pt.life / pt.maxLife), Fade(pt.color, pt.life / pt.maxLife));
         }
 
-        DrawCircleV(firePos, PLANET_RADIUS + 6.0f, Fade(ORANGE, 0.30f));
+        DrawCircleV(firePos, PLANET_RADIUS + 8.0f, Fade(ORANGE, 0.25f));
         DrawCircleV(firePos, PLANET_RADIUS, { 255, 65, 45, 255 });
-        DrawCircleV(firePos, PLANET_RADIUS * 0.45f, { 255, 210, 140, 255 });
+        DrawCircleV(firePos, PLANET_RADIUS * 0.48f, { 255, 220, 150, 255 });
 
-        DrawCircleV(icePos, PLANET_RADIUS + 6.0f, Fade(SKYBLUE, 0.30f));
+        DrawCircleV(icePos, PLANET_RADIUS + 8.0f, Fade(SKYBLUE, 0.25f));
         DrawCircleV(icePos, PLANET_RADIUS, { 45, 195, 255, 255 });
-        DrawCircleV(icePos, PLANET_RADIUS * 0.45f, { 210, 245, 255, 255 });
+        DrawCircleV(icePos, PLANET_RADIUS * 0.48f, { 215, 248, 255, 255 });
 
         for (const auto& p : popups) {
-            DrawText(p.text.c_str(), (int)p.pos.x - 42, (int)p.pos.y, 20, Fade(p.color, p.timer * 1.3f));
+            DrawTextCentered(p.text.c_str(), p.pos.x, p.pos.y, 19.0f, Fade(p.color, Clamp(p.timer * 1.4f, 0.0f, 1.0f)));
         }
     }
     EndMode2D();
 
     int progress = (int)((float)currentTile / (tiles.size() - 1) * 100.0f);
     float accPct = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
-    DrawText(TextFormat("STAGE %d-X   PROGRESS: %d%%   ACCURACY: %.1f%%   BPM: %.0f",
-             selectedStage + 1, progress, accPct, currentBpm), 28, 22, 22, WHITE);
+
+    DrawTextUI(TextFormat("%s  %s", stageMeta[selectedStage].code, stageMeta[selectedStage].title),
+               28.0f, 20.0f, 24.0f, WHITE);
+    DrawTextUI(TextFormat("PROGRESS: %d%%   |   ACCURACY: %.1f%%   |   BPM: %.0f",
+               progress, accPct, currentBpm), 28.0f, 50.0f, 18.0f, LIGHTGRAY);
 
     if (autoPlay) {
-        DrawText("[AUTOPLAY ON]", SCREEN_WIDTH - 210, 22, 22, GOLD);
+        DrawTextUI("[AUTOPLAY ON]", SCREEN_WIDTH - 205.0f, 22.0f, 20.0f, GOLD);
     }
 
-    int barW = 360, barH = 10;
+    int barW = 380, barH = 10;
     int barX = SCREEN_WIDTH / 2 - barW / 2;
     int barY = SCREEN_HEIGHT - 44;
-    DrawRectangle(barX, barY, barW, barH, Fade(ORANGE, 0.45f));
-    DrawRectangle(barX + 60, barY, barW - 120, barH, Fade(GOLD, 0.55f));
-    DrawRectangle(barX + 130, barY, barW - 260, barH, Fade(GREEN, 0.75f));
+    DrawRectangleRounded({ (float)barX - 4, (float)barY - 6, (float)barW + 8, (float)barH + 12 }, 0.4f, 6, Fade(BLACK, 0.45f));
+    DrawRectangle(barX, barY, barW, barH, Fade(GOLD, 0.45f));
+    DrawRectangle(barX + 70, barY, barW - 140, barH, Fade(GREEN, 0.65f));
+    DrawRectangle(barX + 140, barY, barW - 280, barH, Fade(SKYBLUE, 0.85f));
     DrawRectangle(SCREEN_WIDTH / 2 - 2, barY - 6, 4, barH + 12, WHITE);
 
     for (const auto& tk : hitTicks) {
@@ -736,32 +960,42 @@ void UpdateAndDrawFrame() {
     if (state == STATE_COUNTDOWN) {
         const char* cdText = (countdownBeats == 3) ? "3" :
                              (countdownBeats == 2) ? "2" :
-                             (countdownBeats == 1) ? "1" : "READY";
-        DrawText(cdText, SCREEN_WIDTH / 2 - MeasureText(cdText, 64) / 2, 130, 64, GOLD);
+                             (countdownBeats == 1) ? "1" : "GET READY";
+        DrawTextCentered(cdText, SCREEN_WIDTH / 2.0f, 135.0f, 64.0f, GOLD);
     }
     else if (state == STATE_GAMEOVER) {
-        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.65f));
-        DrawText("OVERLOAD!", 495, 230, 54, RED);
-        DrawText(failReason.c_str(), SCREEN_WIDTH / 2 - MeasureText(failReason.c_str(), 24) / 2, 300, 24, LIGHTGRAY);
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.68f));
+        DrawTextCentered("OVERLOAD!", SCREEN_WIDTH / 2.0f, 225.0f, 58.0f, RED);
+        DrawTextCentered(failReason.c_str(), SCREEN_WIDTH / 2.0f, 298.0f, 24.0f, LIGHTGRAY);
         const char* retryMsg = (lastCheckpoint > 0)
-            ? "[SPACE] Checkpoint   |   [R] Restart   |   [ESC] Menu"
-            : "[SPACE] Retry   |   [ESC] Stage Menu";
-        DrawText(retryMsg, SCREEN_WIDTH / 2 - MeasureText(retryMsg, 22) / 2, 370, 22, WHITE);
+            ? "[SPACE] Checkpoint   |   [R] Full Restart   |   [ESC] Stage Select"
+            : "[SPACE] Retry   |   [ESC] Stage Select";
+        DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 368.0f, 22.0f, WHITE);
     }
     else if (state == STATE_CLEAR) {
-        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.65f));
-        DrawText("STAGE CLEAR!", 455, 220, 54, GOLD);
-        const char* clearStat = TextFormat("Final Accuracy: %.2f%%   (Perfect: %d / %d)", accPct, perfectCount, hitCount);
-        DrawText(clearStat, SCREEN_WIDTH / 2 - MeasureText(clearStat, 24) / 2, 295, 24, SKYBLUE);
-        const char* nextMsg = "[SPACE] Next Stage   |   [ESC] Stage Menu";
-        DrawText(nextMsg, SCREEN_WIDTH / 2 - MeasureText(nextMsg, 22) / 2, 365, 22, WHITE);
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.68f));
+        DrawTextCentered("STAGE CLEAR!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, GOLD);
+        DrawTextCentered(TextFormat("Final Accuracy: %.2f%%   (Pure Perfect: %d / %d)", accPct, perfectCount, hitCount),
+                         SCREEN_WIDTH / 2.0f, 292.0f, 24.0f, SKYBLUE);
+        DrawTextCentered("[SPACE] Next Stage   |   [ESC] Stage Select",
+                         SCREEN_WIDTH / 2.0f, 365.0f, 22.0f, WHITE);
     }
 
     EndDrawing();
 }
 
 int main() {
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "A Dance of Fire and Ice - C++");
+
+    gameFont = LoadFontEx("font.ttf", 64, 0, 0);
+    if (gameFont.texture.id == 0) {
+        gameFont = GetFontDefault();
+    } else {
+        SetTextureFilter(gameFont.texture, TEXTURE_FILTER_BILINEAR);
+    }
+
+    InitAmbientMotes();
     BuildStage(0);
 
 #if defined(PLATFORM_WEB)
@@ -773,10 +1007,14 @@ int main() {
     }
 #endif
 
+    if (gameFont.texture.id != GetFontDefault().texture.id) {
+        UnloadFont(gameFont);
+    }
     if (audioReady) {
         UnloadSound(sndHit); UnloadSound(sndKick); UnloadSound(sndSnare);
-        UnloadSound(sndHat); UnloadSound(sndSwirl); UnloadSound(sndSpeedUp);
-        UnloadSound(sndSpeedDown); UnloadSound(sndFail); UnloadSound(sndClear);
+        UnloadSound(sndHat); UnloadSound(sndSwirl); UnloadSound(sndFail);
+        UnloadSound(sndClear);
+        for (int i = 0; i < 4; i++) UnloadSound(sndPad[i]);
         CloseAudioDevice();
     }
     CloseWindow();
