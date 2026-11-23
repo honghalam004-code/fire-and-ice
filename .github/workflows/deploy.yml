@@ -40,14 +40,16 @@ jobs:
           emcc -c rcore.c rshapes.c rtextures.c rtext.c rmodels.c raudio.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
           emar rcs libraylib.a *.o
 
-      - name: 4. Compile C++ Game to WebAssembly
+      - name: 4. Download Modern Font & Compile C++ to WebAssembly
         run: |
           source ./emsdk/emsdk_env.sh
+          curl -fL "https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf" -o font.ttf || cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf font.ttf
           mkdir -p public
           em++ main.cpp -o public/index.html -Os -Wall \
             -I./raylib/src ./raylib/src/libraylib.a \
             -s USE_GLFW=3 -s ASYNCIFY -s INITIAL_MEMORY=67108864 \
             --shell-file shell.html \
+            --preload-file font.ttf \
             -DPLATFORM_WEB
 
       - name: 5. Setup GitHub Pages
