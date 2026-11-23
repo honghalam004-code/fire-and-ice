@@ -1,0 +1,69 @@
+name: Build C++ Game and Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: 1. 저장소 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 2. Emscripten 웹 컴파일러 설치
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+
+      - name: 3. Raylib 라이브러리 웹용 빌드
+        run: |
+          source ./emsdk/emsdk_env.sh
+          git clone --depth 1 https://github.com/raysan5/raylib.git
+          cd raylib/src
+          emcc -c rcore.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+          emcc -c rshapes.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+          emcc -c rtextures.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+          emcc -c rtext.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+          emcc -c rmodels.c -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+          emcc -c utils.c -Os -Wall -DPLATFORM_WEB
+          emcc -c raudio.c -Os -Wall -DPLATFORM_WEB
+          emar rcs libraylib.a rcore.o rshapes.o rtextures.o rtext.o rmodels.o utils.o raudio.o
+
+      - name: 4. 얼불춤 C++ 코드를 WebAssembly로 컴파일
+        run: |
+          source ./emsdk/emsdk_env.sh
+          mkdir -p public
+          em++ main.cpp -o public/index.html -Os -Wall \
+            -I./raylib/src ./raylib/src/libraylib.a \
+            -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 \
+            --shell-file shell.html \
+            -DPLATFORM_WEB
+
+      - name: 5. GitHub Pages 환경 설정
+        uses: actions/configure-pages@v5
+
+      - name: 6. 빌드 결과물 업로드
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './public'
+
+      - name: 7. 웹사이트 배포 완료
+        id: deployment
+        uses: actions/deploy-pages@v4
