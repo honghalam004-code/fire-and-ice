@@ -43,8 +43,12 @@ jobs:
       - name: 4. Install Korean Font & Compile C++ to WebAssembly
         run: |
           source ./emsdk/emsdk_env.sh
-          sudo apt-get update && sudo apt-get install -y fonts-nanum
-          cp "$(find /usr/share/fonts -name 'NanumGothicBold.ttf' | head -n 1)" font.ttf
+          curl -fL "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Bold.ttf" -o font.ttf || true
+          if [ ! -s font.ttf ]; then
+            sudo apt-get update && sudo apt-get install -y fonts-nanum
+            cp "$(find /usr/share/fonts -iname '*nanum*bold*.ttf' | head -n 1)" font.ttf
+          fi
+          ls -lh font.ttf
           mkdir -p public
           em++ main.cpp -o public/index.html -Os -Wall \
             -I./raylib/src ./raylib/src/libraylib.a \
