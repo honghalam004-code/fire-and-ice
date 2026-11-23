@@ -12,26 +12,34 @@
 #endif
 
 // ==========================================
-// 1. Constants & Data Structures
+// 1. Constants & Enums
 // ==========================================
 const int SCREEN_WIDTH = 1280;
 const int SCREEN_HEIGHT = 720;
 const float TILE_DIST = 96.0f;
 const float PLANET_RADIUS = 16.5f;
-const int STAGE_COUNT = 6;
+const int WORLD_COUNT = 6;
 
-enum GameState {
-    STATE_MENU,
-    STATE_COUNTDOWN,
-    STATE_PLAYING,
-    STATE_GAMEOVER,
-    STATE_CLEAR
+enum ScreenState {
+    SCR_MODE_SELECT,
+    SCR_WORLD_SELECT,
+    SCR_COUNTDOWN,
+    SCR_PLAYING,
+    SCR_GAMEOVER,
+    SCR_CLEAR
+};
+
+enum GameMode {
+    MODE_JOURNEY = 0,      // 6 Thematic Worlds (Easy -> Master)
+    MODE_ENDLESS = 1,      // Infinite Procedural Track
+    MODE_ZEN = 2,          // No-Fail Practice Mode
+    MODE_PERFECTIONIST = 3 // One Mistake = Instant Shatter
 };
 
 enum Strictness {
-    STRICT_LENIENT = 0,
-    STRICT_NORMAL  = 1,
-    STRICT_STRICT  = 2
+    STRICT_EASY   = 0,
+    STRICT_NORMAL = 1,
+    STRICT_STRICT = 2
 };
 
 struct Tile {
@@ -93,37 +101,101 @@ struct HitTick {
     float alpha;
 };
 
-struct StageMeta {
-    const char* code;
-    const char* title;
-    const char* subtitle;
+struct WorldInfo {
+    const char* name;
+    const char* diffLabel;
+    const char* songStyle;
+    const char* gimmickDesc;
     float bpm;
-    int stars;
+    int difficultyLevel; // 1 to 6
     float hue;
+    int melodyNotes[8];  // Indices into note scale
+    int bassNotes[4];
+    int instrumentType;  // 0: Music Box, 1: E-Piano, 2: Crystal Chime, 3: Harp, 4: Synth Lead, 5: Boss Organ
     bool cleared;
     float bestAcc;
 };
 
 // ==========================================
-// 2. Global State
+// 2. Global Game State
 // ==========================================
 Font gameFont = { 0 };
-GameState state = STATE_MENU;
+ScreenState screen = SCR_MODE_SELECT;
+GameMode currentMode = MODE_JOURNEY;
 Strictness strictness = STRICT_NORMAL;
-int selectedStage = 0;
+int selectedWorld = 0;
 bool autoPlay = false;
 float audioOffsetMs = 0.0f;
 
-StageMeta stageMeta[STAGE_COUNT] = {
-    { "1-X", "A Dance of Fire",    "Steady Basics & Swirls", 120.0f, 1, 14.0f,  false, 0.0f },
-    { "2-X", "Waltz of Ice",       "Midspins & U-Turns",     128.0f, 2, 198.0f, false, 0.0f },
-    { "3-X", "Neon Metropolis",    "Syncopated Stairs",      135.0f, 3, 265.0f, false, 0.0f },
-    { "4-X", "Hexagonal Pulse",    "60-Deg Triplet Groove",  142.0f, 3, 152.0f, false, 0.0f },
-    { "5-X", "Solar Flare",        "Midspin & Stair Chains", 150.0f, 4, 34.0f,  false, 0.0f },
-    { "6-X", "Chrono Singularity", "Final Boss Rush",        158.0f, 5, 315.0f, false, 0.0f }
+// Note frequency table (A3 to E5)
+const float NOTE_FREQS[18] = {
+    220.00f, // 0: A3
+    233.08f, // 1: Bb3
+    246.94f, // 2: B3
+    261.63f, // 3: C4
+    277.18f, // 4: C#4
+    293.66f, // 5: D4
+    311.13f, // 6: D#4
+    329.63f, // 7: E4
+    349.23f, // 8: F4
+    369.99f, // 9: F#4
+    392.00f, // 10: G4
+    415.30f, // 11: G#4
+    440.00f, // 12: A4
+    466.16f, // 13: Bb4
+    493.88f, // 14: B4
+    523.25f, // 15: C5
+    587.33f, // 16: D5
+    659.25f  // 17: E5
+};
+
+WorldInfo worlds[WORLD_COUNT] = {
+    {
+        "First Spark", "VERY EASY", "Music Box Ballad",
+        "Straight & 90-Deg Turns Only",
+        96.0f, 1, 24.0f,
+        { 3, 7, 10, 12, 10, 7, 5, 10 }, // C Major Pentatonic
+        { 3, 8, 3, 10 }, 0, false, 0.0f
+    },
+    {
+        "Whispering Breeze", "EASY", "Warm Electric Piano",
+        "Introduces Stairs & Swirl Reversals",
+        108.0f, 2, 165.0f,
+        { 8, 12, 15, 17, 16, 12, 10, 15 }, // F Lydian
+        { 8, 5, 10, 3 }, 1, false, 0.0f
+    },
+    {
+        "Glacial Spiral", "MEDIUM", "Crystal Winter Chimes",
+        "Expanding Spiral Coil & 45-Deg Diagonals",
+        120.0f, 3, 198.0f,
+        { 12, 15, 17, 14, 15, 12, 10, 7 }, // A Minor
+        { 0, 8, 3, 10 }, 2, false, 0.0f
+    },
+    {
+        "Starlight Waltz", "CHALLENGING", "Celestial Harp Arpeggio",
+        "Diamond Arena, Triangle Midspins & U-Turns",
+        132.0f, 4, 248.0f,
+        { 5, 8, 12, 15, 14, 10, 12, 8 }, // D Dorian
+        { 5, 10, 1, 0 }, 3, false, 0.0f
+    },
+    {
+        "Hexagon Citadel", "HARD", "Retro Synthwave Riff",
+        "60 & 120-Deg Honeycomb Triplet Paths",
+        144.0f, 5, 290.0f,
+        { 7, 8, 11, 14, 15, 14, 11, 8 }, // E Phrygian Dominant
+        { 7, 8, 5, 7 }, 4, false, 0.0f
+    },
+    {
+        "Eclipse Finale", "MASTER", "Grand Boss Organ",
+        "Fortress Cross Combining Every Gimmick",
+        156.0f, 6, 345.0f,
+        { 3, 6, 10, 11, 10, 6, 5, 2 }, // C Harmonic Minor
+        { 3, 11, 8, 10 }, 5, false, 0.0f
+    }
 };
 
 std::vector<Tile> tiles;
+std::vector<Vector2> previewPoints; // Normalized points for Mini-Map preview
 std::deque<TrailPoint> fireTrail;
 std::deque<TrailPoint> iceTrail;
 std::vector<Particle> particles;
@@ -135,11 +207,14 @@ std::deque<HitTick> hitTicks;
 int currentTile = 0;
 int lastCheckpoint = 0;
 Vector2 pivotPos = { 0, 0 };
+Vector2 endlessBuildPivot = { 0, 0 };
+int endlessTilesCleared = 0;
+int bestEndlessScore = 0;
+
 bool isFirePivot = true;
 bool cw = true;
 
-float baseBpm = 120.0f;
-float currentBpm = 120.0f;
+float currentBpm = 96.0f;
 float currentAngle = 0.0f;
 float targetDiff = PI;
 float traveledAngle = 0.0f;
@@ -149,10 +224,11 @@ float beatTimer = 0.0f;
 int totalBeatCount = 0;
 float cameraBeatPulse = 0.0f;
 float screenShake = 0.0f;
-float bgHue = 14.0f;
+float bgHue = 24.0f;
 
 int hitCount = 0;
 int perfectCount = 0;
+int streakCount = 0;
 float accuracySum = 0.0f;
 std::string failReason = "";
 
@@ -166,21 +242,35 @@ Sound sndHat;
 Sound sndSwirl;
 Sound sndFail;
 Sound sndClear;
-Sound sndPad[4];
+Sound sndMelody[6][18]; // Pre-synthesized instruments x notes
+Sound sndBass[18];
 
 // ==========================================
-// 3. Typography & Math Helpers
+// 3. UI & Typography Helpers
 // ==========================================
 void DrawTextUI(const char* text, float x, float y, float size, Color color, bool shadow = true) {
     if (shadow) {
-        DrawTextEx(gameFont, text, { x + 2.0f, y + 2.0f }, size, 1.2f, Fade(BLACK, (color.a / 255.0f) * 0.65f));
+        DrawTextEx(gameFont, text, { x + 2.0f, y + 2.0f }, size, 1.0f, Fade(BLACK, (color.a / 255.0f) * 0.65f));
     }
-    DrawTextEx(gameFont, text, { x, y }, size, 1.2f, color);
+    DrawTextEx(gameFont, text, { x, y }, size, 1.0f, color);
 }
 
 void DrawTextCentered(const char* text, float centerX, float y, float size, Color color, bool shadow = true) {
-    Vector2 dim = MeasureTextEx(gameFont, text, size, 1.2f);
+    Vector2 dim = MeasureTextEx(gameFont, text, size, 1.0f);
     DrawTextUI(text, centerX - dim.x * 0.5f, y, size, color, shadow);
+}
+
+// Version-safe outlined rounded card helper
+void DrawCardBox(Rectangle rec, float roundness, Color fillCol, Color borderCol, float borderThick = 2.0f) {
+    DrawRectangleRounded({ rec.x + 4, rec.y + 6, rec.width, rec.height }, roundness, 10, Fade(BLACK, 0.42f));
+    DrawRectangleRounded(rec, roundness, 10, borderCol);
+    Rectangle inner = {
+        rec.x + borderThick,
+        rec.y + borderThick,
+        rec.width - borderThick * 2.0f,
+        rec.height - borderThick * 2.0f
+    };
+    DrawRectangleRounded(inner, roundness, 10, fillCol);
 }
 
 float NormalizeAngle(float a) {
@@ -190,19 +280,19 @@ float NormalizeAngle(float a) {
 }
 
 void GetJudgmentWindows(float& purePerfect, float& perfect, float& maxWindow) {
-    if (strictness == STRICT_LENIENT) {
-        purePerfect = 0.065f; perfect = 0.130f; maxWindow = 0.210f;
+    if (strictness == STRICT_EASY) {
+        purePerfect = 0.070f; perfect = 0.145f; maxWindow = 0.230f;
     } else if (strictness == STRICT_STRICT) {
         purePerfect = 0.032f; perfect = 0.070f; maxWindow = 0.125f;
     } else {
-        purePerfect = 0.048f; perfect = 0.100f; maxWindow = 0.165f;
+        purePerfect = 0.050f; perfect = 0.105f; maxWindow = 0.175f;
     }
 }
 
 // ==========================================
-// 4. Procedural Audio Synthesizer
+// 4. Multi-Instrument Audio Synthesizer
 // ==========================================
-Sound SynthWave(int type, float freq, float duration, float volume) {
+Sound SynthSFX(int type, float freq, float duration, float volume) {
     int sampleRate = 44100;
     int count = (int)(sampleRate * duration);
     short* data = (short*)RL_MALLOC(count * sizeof(short));
@@ -211,34 +301,69 @@ Sound SynthWave(int type, float freq, float duration, float volume) {
         float t = (float)i / sampleRate;
         float sample = 0.0f;
 
-        if (type == 0) {
+        if (type == 0) { // Crisp Hit
             float env = expf(-t * 36.0f);
-            sample = sinf(2.0f * PI * freq * t) * 0.68f
-                   + sinf(2.0f * PI * (freq * 1.5f) * t) * 0.32f;
-            sample *= env;
-        }
-        else if (type == 1) {
+            sample = (sinf(2.0f * PI * freq * t) * 0.68f + sinf(2.0f * PI * (freq * 1.5f) * t) * 0.32f) * env;
+        } else if (type == 1) { // Kick
             float env = expf(-t * 17.0f);
             float f = freq * expf(-t * 22.0f) + 44.0f;
             sample = sinf(2.0f * PI * f * t) * env;
-        }
-        else if (type == 2) {
+        } else if (type == 2) { // Snare / Hat
             float env = expf(-t * (freq > 1000.0f ? 58.0f : 23.0f));
             float noise = ((float)GetRandomValue(-1000, 1000) / 1000.0f);
             float tone = (freq < 1000.0f) ? sinf(2.0f * PI * 185.0f * t) * 0.38f : 0.0f;
             sample = (noise * 0.72f + tone) * env;
-        }
-        else if (type == 3) {
+        } else if (type == 3) { // Swirl / Fail Sweep
             float env = expf(-t * 10.5f);
             float f = freq + (duration > 0.25f ? -freq * 0.65f * (t / duration) : freq * 0.55f * (t / duration));
             sample = (sinf(2.0f * PI * f * t) + 0.28f * sinf(4.0f * PI * f * t)) * env;
         }
-        else if (type == 4) {
-            float attack = fminf(1.0f, t * 45.0f);
-            float env = attack * expf(-t * 6.5f);
-            sample = (sinf(2.0f * PI * freq * t) * 0.55f
-                    + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.25f
-                    + sinf(2.0f * PI * (freq * 0.5f) * t) * 0.20f) * env;
+
+        sample = Clamp(sample, -1.0f, 1.0f);
+        data[i] = (short)(sample * 32767.0f * volume);
+    }
+
+    Wave w = { (unsigned int)count, (unsigned int)sampleRate, 16, 1, data };
+    Sound s = LoadSoundFromWave(w);
+    UnloadWave(w);
+    return s;
+}
+
+Sound SynthInstrumentNote(int inst, float freq, float duration, float volume) {
+    int sampleRate = 44100;
+    int count = (int)(sampleRate * duration);
+    short* data = (short*)RL_MALLOC(count * sizeof(short));
+
+    for (int i = 0; i < count; i++) {
+        float t = (float)i / sampleRate;
+        float sample = 0.0f;
+
+        if (inst == 0) { // Music Box (pure bell harmonics)
+            float env = expf(-t * 8.0f);
+            sample = (sinf(2.0f * PI * freq * t) * 0.65f + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.35f) * env;
+        } else if (inst == 1) { // Electric Piano (warm tine + tremolo)
+            float env = fminf(1.0f, t * 40.0f) * expf(-t * 5.0f);
+            float trem = 1.0f + 0.15f * sinf(2.0f * PI * 5.5f * t);
+            sample = (sinf(2.0f * PI * freq * t) * 0.7f + sinf(2.0f * PI * (freq * 3.0f) * t) * 0.15f * expf(-t * 14.0f)) * env * trem;
+        } else if (inst == 2) { // Crystal Chimes (shimmering overtones)
+            float env = expf(-t * 7.5f);
+            sample = (sinf(2.0f * PI * freq * t) * 0.5f + sinf(2.0f * PI * (freq * 2.5f) * t) * 0.3f + sinf(2.0f * PI * (freq * 4.0f) * t) * 0.2f) * env;
+        } else if (inst == 3) { // Harp Pluck
+            float env = fminf(1.0f, t * 60.0f) * expf(-t * 6.5f);
+            sample = (sinf(2.0f * PI * freq * t) * 0.6f + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.3f + sinf(2.0f * PI * (freq * 3.0f) * t) * 0.1f) * env;
+        } else if (inst == 4) { // Retro Synth Lead (soft saw/square blend)
+            float env = fminf(1.0f, t * 50.0f) * expf(-t * 6.0f);
+            float s1 = sinf(2.0f * PI * freq * t);
+            float s2 = (sinf(2.0f * PI * freq * t) > 0.0f ? 0.35f : -0.35f);
+            sample = (s1 * 0.65f + s2 * 0.35f) * env;
+        } else if (inst == 5) { // Boss Organ (rich octave stack)
+            float env = fminf(1.0f, t * 35.0f) * expf(-t * 4.5f);
+            sample = (sinf(2.0f * PI * (freq * 0.5f) * t) * 0.4f
+                    + sinf(2.0f * PI * freq * t) * 0.4f
+                    + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.2f) * env;
+        } else { // Deep Sub Bass
+            float env = fminf(1.0f, t * 30.0f) * expf(-t * 4.5f);
+            sample = (sinf(2.0f * PI * (freq * 0.5f) * t) * 0.8f + sinf(2.0f * PI * freq * t) * 0.2f) * env;
         }
 
         sample = Clamp(sample, -1.0f, 1.0f);
@@ -254,119 +379,105 @@ Sound SynthWave(int type, float freq, float duration, float volume) {
 void EnsureAudioInitialized() {
     if (audioReady) return;
     InitAudioDevice();
-    sndHit   = SynthWave(0, 587.33f, 0.11f, 0.75f);
-    sndKick  = SynthWave(1, 152.00f, 0.18f, 0.65f);
-    sndSnare = SynthWave(2, 400.00f, 0.14f, 0.36f);
-    sndHat   = SynthWave(2, 2600.0f, 0.05f, 0.20f);
-    sndSwirl = SynthWave(3, 440.00f, 0.15f, 0.48f);
-    sndFail  = SynthWave(3, 155.00f, 0.42f, 0.80f);
-    sndClear = SynthWave(0, 880.00f, 0.48f, 0.80f);
+    sndHit   = SynthSFX(0, 587.33f, 0.10f, 0.72f);
+    sndKick  = SynthSFX(1, 152.00f, 0.17f, 0.60f);
+    sndSnare = SynthSFX(2, 400.00f, 0.13f, 0.32f);
+    sndHat   = SynthSFX(2, 2600.0f, 0.045f, 0.18f);
+    sndSwirl = SynthSFX(3, 440.00f, 0.14f, 0.45f);
+    sndFail  = SynthSFX(3, 155.00f, 0.40f, 0.78f);
+    sndClear = SynthSFX(0, 880.00f, 0.45f, 0.78f);
 
-    float padFreqs[4] = { 220.00f, 261.63f, 329.63f, 392.00f };
-    for (int i = 0; i < 4; i++) {
-        sndPad[i] = SynthWave(4, padFreqs[i], 0.42f, 0.26f);
+    for (int inst = 0; inst < 6; inst++) {
+        for (int n = 0; n < 18; n++) {
+            sndMelody[inst][n] = SynthInstrumentNote(inst, NOTE_FREQS[n], 0.36f, 0.26f);
+        }
+    }
+    for (int n = 0; n < 18; n++) {
+        sndBass[n] = SynthInstrumentNote(6, NOTE_FREQS[n], 0.44f, 0.28f);
     }
     audioReady = true;
 }
 
 // ==========================================
-// 5. Six Steady-BPM Stage Definitions
+// 5. Thematic Geometric Course Builders
 // ==========================================
-void BuildStage(int stageIdx) {
-    tiles.clear();
-    std::vector<MapStep> steps;
-    baseBpm = stageMeta[stageIdx].bpm;
-    bgHue   = stageMeta[stageIdx].hue;
-
-    if (stageIdx == 0) {
-        // 1-X: A Dance of Fire (120 BPM Constant)
-        steps = {
+std::vector<MapStep> GetWorldSteps(int worldIdx) {
+    if (worldIdx == 0) {
+        // World 1: First Spark (96 BPM) - Gentle Straight Runway + Wide L-Turns (NO swirls, NO midspins)
+        return {
+            {0}, {0}, {0}, {0}, {0}, {0},
+            {-90}, {0}, {0}, {0},
+            {0, false, false, true}, // Checkpoint
+            {0}, {90}, {0}, {0}, {0},
+            {-90}, {0}, {0}, {0}, {0}, {0}
+        };
+    }
+    else if (worldIdx == 1) {
+        // World 2: Whispering Breeze (108 BPM) - Ascending Sky Staircase + Gentle Swirls
+        return {
+            {0}, {0}, {0},
+            {-90}, {0}, {-90}, {0}, {-90}, {0},
+            {0, true}, {0}, {0}, {0}, // First Swirl!
+            {90, false, false, true}, {0}, {90}, {0}, {90}, {0},
+            {0, true}, {0}, {-90}, {0}, {0}, {0}, {0}
+        };
+    }
+    else if (worldIdx == 2) {
+        // World 3: Glacial Spiral (120 BPM) - Spiral Coil + 45-Deg Diagonals
+        return {
             {0}, {0}, {0}, {0},
-            {-90}, {0}, {-90}, {0},
-            {90}, {0}, {90}, {0},
-            {0, true}, {0}, {0}, {0},
-            {90, false, false, true}, {0}, {90}, {0},
-            {-90}, {0}, {-90}, {0},
-            {0, true}, {0}, {-45}, {45}, {-45}, {45},
-            {0}, {0}, {-90}, {0},
-            {90}, {0}, {0}, {0}
+            {90}, {90}, {90},
+            {180}, {180},
+            {-90}, {-90},
+            {0, false, false, true}, // Checkpoint
+            {0, true}, {0},
+            {-45}, {45}, {-45}, {45}, {-45}, {45},
+            {0, true}, {0}, {-90}, {0}, {90}, {0}, {0}, {0}
         };
     }
-    else if (stageIdx == 1) {
-        // 2-X: Waltz of Ice (128 BPM Constant)
-        steps = {
-            {0}, {0}, {-90}, {0},
-            {-90, false, true}, {0}, {90, false, true}, {0},
-            {0, true}, {0}, {-45}, {-90}, {-45}, {0},
-            {0, false, false, true},
-            {180}, {0},
-            {-45}, {45}, {-45}, {45},
+    else if (worldIdx == 3) {
+        // World 4: Starlight Waltz (132 BPM) - Diamond Arena + Triangle Midspins + 360 U-Turn
+        return {
+            {0}, {-45}, {-45}, {45}, {45},
+            {-90, false, true}, {0}, {90, false, true}, {0}, // Midspin peaks
+            {0, true}, {0}, {180}, {0}, // 360 U-Turn
+            {0, false, false, true}, // Checkpoint
+            {45}, {45}, {-45}, {-45},
             {-90, false, true}, {0}, {-90, false, true}, {0},
-            {0, true}, {0}, {90}, {0}, {90}, {0},
-            {0}, {0}, {-90}, {0},
-            {0}, {0}, {0}, {0}
+            {0, true}, {0}, {-90}, {0}, {90}, {0}, {0}, {0}
         };
     }
-    else if (stageIdx == 2) {
-        // 3-X: Neon Metropolis (135 BPM Constant)
-        steps = {
-            {0}, {-90}, {0}, {90}, {0},
-            {0}, {0}, {-90}, {0}, {-90}, {0},
-            {0, false, false, true},
-            {0, true}, {0}, {90}, {0}, {90}, {0},
-            {-90, false, true}, {0}, {90, false, true}, {0},
-            {0}, {0}, {180}, {0},
-            {0, false, false, true},
-            {0}, {-45}, {45}, {-45}, {45}, {-90}, {0},
-            {0}, {0, true}, {0}, {0}
-        };
-    }
-    else if (stageIdx == 3) {
-        // 4-X: Hexagonal Pulse (142 BPM Constant)
-        steps = {
-            {0}, {0}, {-60}, {0}, {60}, {0},
-            {-60}, {-120}, {-60}, {0},
-            {0, true}, {0}, {60}, {120}, {60}, {0},
-            {0, false, false, true},
+    else if (worldIdx == 4) {
+        // World 5: Hexagon Citadel (144 BPM) - 60 & 120-Deg Honeycomb Loops
+        return {
+            {0}, {-60}, {0}, {60}, {120}, {60}, {0},
             {-60, false, true}, {0}, {60, false, true}, {0},
-            {0}, {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
-            {0, false, false, true},
-            {180, true}, {0}, {-60}, {60}, {-60}, {60},
-            {0, true}, {0}, {0}, {0}
-        };
-    }
-    else if (stageIdx == 4) {
-        // 5-X: Solar Flare (150 BPM Constant)
-        steps = {
-            {0}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
-            {-90, false, true}, {0}, {-90, false, true}, {0},
-            {0, true}, {90, false, true}, {0}, {90, false, true}, {0},
-            {0, false, false, true},
-            {0}, {0}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
-            {0, false, false, true},
-            {-45, true}, {45}, {-45}, {45}, {-90}, {0}, {90}, {0},
-            {180}, {0}, {-90, false, true}, {0},
+            {0, true}, {0}, {-60}, {-120}, {-60}, {0},
+            {0, false, false, true}, // Checkpoint
+            {60}, {0}, {-60}, {0}, {60}, {0}, {-60}, {0},
+            {180, true}, {0}, {-60, false, true}, {0},
             {0, true}, {0}, {0}, {0}
         };
     }
     else {
-        // 6-X: Chrono Singularity (158 BPM Constant)
-        steps = {
+        // World 6: Eclipse Finale (156 BPM) - Grand Fortress Cross
+        return {
             {0}, {-90}, {0}, {90}, {0},
             {0, true}, {-90, true}, {0, true}, {90, true},
             {-90, false, true}, {0}, {-90, false, true}, {0},
-            {0, false, false, true},
-            {0}, {-45}, {45}, {-45}, {45}, {-90}, {0}, {-90}, {0},
-            {0, false, false, true},
-            {180, true}, {0}, {180, true}, {0},
+            {0, false, false, true}, // Checkpoint 1
+            {-45}, {45}, {-45}, {45}, {180, true}, {0},
             {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
-            {0, false, false, true},
-            {0}, {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
+            {0, false, false, true}, // Checkpoint 2
+            {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
             {-90, false, true}, {0}, {90, false, true}, {0},
-            {0}, {0, true}, {0}, {0}
+            {0, true}, {0}, {0}, {0}
         };
     }
+}
 
+void BuildTilesFromSteps(const std::vector<MapStep>& steps) {
+    tiles.clear();
     Vector2 curPos = { 0.0f, 0.0f };
     tiles.push_back({ curPos, false, false, false, true, 0.0f });
 
@@ -391,15 +502,65 @@ void BuildStage(int stageIdx) {
     }
 }
 
+// Compute normalized mini-map points for World Select showcase
+void UpdateWorldPreview(int worldIdx) {
+    std::vector<MapStep> steps = GetWorldSteps(worldIdx);
+    previewPoints.clear();
+    Vector2 p = { 0.0f, 0.0f };
+    previewPoints.push_back(p);
+    Vector2 piv = p;
+
+    float minX = 0, maxX = 0, minY = 0, maxY = 0;
+    for (const auto& s : steps) {
+        float rad = s.angleDeg * DEG2RAD;
+        Vector2 np = { piv.x + cosf(rad), piv.y + sinf(rad) };
+        previewPoints.push_back(np);
+        if (!s.midspin) piv = np;
+        minX = fminf(minX, np.x); maxX = fmaxf(maxX, np.x);
+        minY = fminf(minY, np.y); maxY = fmaxf(maxY, np.y);
+    }
+
+    float spanX = fmaxf(1.0f, maxX - minX);
+    float spanY = fmaxf(1.0f, maxY - minY);
+    float scale = 1.0f / fmaxf(spanX, spanY);
+    float midX = (minX + maxX) * 0.5f;
+    float midY = (minY + maxY) * 0.5f;
+
+    for (auto& pt : previewPoints) {
+        pt.x = (pt.x - midX) * scale;
+        pt.y = (pt.y - midY) * scale;
+    }
+}
+
+// Append procedural tiles for Endless Rush Mode
+void AppendEndlessTiles(int count) {
+    const float angles[7] = { 0.0f, 0.0f, -90.0f, 90.0f, -45.0f, 45.0f, 180.0f };
+    for (int i = 0; i < count; i++) {
+        float deg = angles[GetRandomValue(0, 6)];
+        bool swirl = (GetRandomValue(0, 7) == 0);
+        bool midspin = (!swirl && deg != 180.0f && GetRandomValue(0, 8) == 0);
+        float rad = deg * DEG2RAD;
+
+        Vector2 nextPos = {
+            endlessBuildPivot.x + cosf(rad) * TILE_DIST,
+            endlessBuildPivot.y + sinf(rad) * TILE_DIST
+        };
+        tiles.push_back({ nextPos, swirl, midspin, false, false, 0.0f });
+        if (!midspin) {
+            endlessBuildPivot = nextPos;
+        }
+    }
+}
+
 // ==========================================
 // 6. Visual Effects & Orbit Logic
 // ==========================================
 void InitAmbientMotes() {
     motes.clear();
-    for (int i = 0; i < 48; i++) {
+    for (int i = 0; i < 45; i++) {
         motes.push_back({
             { (float)GetRandomValue(0, SCREEN_WIDTH), (float)GetRandomValue(0, SCREEN_HEIGHT) },
-            { (float)GetRandomValue(-18, 18), (float)GetRandomValue(-28, -8) },
+            { (float)GetRandomValue(-16, 16), (float)GetRandomValue(-26, -8) },
             (float)GetRandomValue(2, 5),
             (float)GetRandomValue(0, 628) / 100.0f
         });
@@ -409,8 +570,8 @@ void InitAmbientMotes() {
 void SpawnHitParticles(Vector2 pos, Color col, int count) {
     for (int i = 0; i < count; i++) {
         float ang = (float)GetRandomValue(0, 360) * DEG2RAD;
-        float spd = (float)GetRandomValue(85, 340);
-        float life = (float)GetRandomValue(28, 55) / 100.0f;
+        float spd = (float)GetRandomValue(85, 330);
+        float life = (float)GetRandomValue(28, 52) / 100.0f;
         particles.push_back({
             pos,
             { cosf(ang) * spd, sinf(ang) * spd },
@@ -465,8 +626,8 @@ void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
 
     if (tiles[index].swirl) {
         cw = !cw;
-        if (state == STATE_PLAYING) SpawnShockwave(pivotPos, MAGENTA, 95.0f);
-        if (audioReady && state == STATE_PLAYING) PlaySound(sndSwirl);
+        if (screen == SCR_PLAYING) SpawnShockwave(pivotPos, MAGENTA, 95.0f);
+        if (audioReady && screen == SCR_PLAYING) PlaySound(sndSwirl);
     }
 
     float diff = cw ? NormalizeAngle(endAng - startAng) : NormalizeAngle(startAng - endAng);
@@ -477,9 +638,8 @@ void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
     traveledAngle = 0.0f;
 }
 
-void StartStage(int stageIdx, int startFromTile = 0) {
+void StartGame(int startFromTile = 0) {
     EnsureAudioInitialized();
-    BuildStage(stageIdx);
 
     fireTrail.clear();
     iceTrail.clear();
@@ -488,22 +648,36 @@ void StartStage(int stageIdx, int startFromTile = 0) {
     popups.clear();
     hitTicks.clear();
 
+    if (currentMode == MODE_ENDLESS) {
+        tiles.clear();
+        Vector2 startPos = { 0.0f, 0.0f };
+        tiles.push_back({ startPos, false, false, false, true, 0.0f });
+        endlessBuildPivot = startPos;
+        endlessTilesCleared = 0;
+        currentBpm = 126.0f;
+        bgHue = 185.0f;
+        AppendEndlessTiles(40);
+        startFromTile = 0;
+    } else {
+        BuildTilesFromSteps(GetWorldSteps(selectedWorld));
+        currentBpm = worlds[selectedWorld].bpm;
+        bgHue = worlds[selectedWorld].hue;
+    }
+
     currentTile = startFromTile;
     lastCheckpoint = startFromTile;
     isFirePivot = (startFromTile % 2 == 0);
     cw = true;
-    currentBpm = baseBpm;
     hitCount = 0;
     perfectCount = 0;
+    streakCount = 0;
     accuracySum = 0.0f;
     failReason = "";
 
     Vector2 prevPiv = { 0, 0 };
     for (int i = 0; i <= startFromTile; i++) {
         tiles[i].cleared = true;
-        if (i > 0 && tiles[i].swirl) {
-            cw = !cw;
-        }
+        if (i > 0 && tiles[i].swirl) cw = !cw;
         if (!tiles[i].midspin) {
             if (i > 0) prevPiv = pivotPos;
             pivotPos = tiles[i].pos;
@@ -520,15 +694,56 @@ void StartStage(int stageIdx, int startFromTile = 0) {
     camera.target = pivotPos;
     camera.offset = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
     camera.zoom = 1.0f;
-    state = STATE_COUNTDOWN;
+    screen = SCR_COUNTDOWN;
     PlaySound(sndKick);
-    PlaySound(sndPad[0]);
 }
 
 bool IsHitKeyPressed() {
     return IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_Z) || IsKeyPressed(KEY_X) ||
            IsKeyPressed(KEY_J) || IsKeyPressed(KEY_K) || IsKeyPressed(KEY_D) ||
            IsKeyPressed(KEY_F) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
+    currentTile++;
+    tiles[currentTile].cleared = true;
+    tiles[currentTile].hitAnim = 1.0f;
+
+    if (!wasMissInZen && tiles[currentTile].checkpoint && currentMode == MODE_JOURNEY) {
+        lastCheckpoint = currentTile;
+        AddPopup("CHECKPOINT!", hitTilePos, GREEN);
+        SpawnShockwave(hitTilePos, GREEN, 110.0f);
+    }
+
+    if (!tiles[currentTile].midspin) {
+        isFirePivot = !isFirePivot;
+    }
+
+    if (currentMode == MODE_ENDLESS) {
+        endlessTilesCleared++;
+        if (endlessTilesCleared > bestEndlessScore) bestEndlessScore = endlessTilesCleared;
+        if (currentTile + 20 >= (int)tiles.size()) {
+            AppendEndlessTiles(25);
+        }
+        Vector2 oldPivot = pivotPos;
+        SetupOrbitForTile(currentTile, oldPivot);
+    } else {
+        if (currentTile >= (int)tiles.size() - 1) {
+            float finalAcc = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
+            if (!autoPlay && currentMode != MODE_ZEN) {
+                worlds[selectedWorld].cleared = true;
+                if (finalAcc > worlds[selectedWorld].bestAcc) {
+                    worlds[selectedWorld].bestAcc = finalAcc;
+                }
+            }
+            PlaySound(sndClear);
+            SpawnShockwave(hitTilePos, GOLD, 160.0f);
+            screen = SCR_CLEAR;
+        } else {
+            Vector2 oldPivot = pivotPos;
+            SetupOrbitForTile(currentTile, oldPivot);
+        }
+    }
 }
 
 // ==========================================
@@ -538,201 +753,294 @@ void UpdateAndDrawFrame() {
     float dt = GetFrameTime();
     if (dt > 0.05f) dt = 0.05f;
 
-    if (IsKeyPressed(KEY_TAB)) autoPlay = !autoPlay;
-    if (IsKeyPressed(KEY_LEFT_BRACKET))  audioOffsetMs = fmaxf(-150.0f, audioOffsetMs - 5.0f);
-    if (IsKeyPressed(KEY_RIGHT_BRACKET)) audioOffsetMs = fminf(150.0f, audioOffsetMs + 5.0f);
-
     for (auto& m : motes) {
         m.pos = Vector2Add(m.pos, Vector2Scale(m.vel, dt));
-        m.phase += 2.2f * dt;
+        m.phase += 2.0f * dt;
         if (m.pos.y < -10) m.pos.y = SCREEN_HEIGHT + 10;
         if (m.pos.x < -10) m.pos.x = SCREEN_WIDTH + 10;
         if (m.pos.x > SCREEN_WIDTH + 10) m.pos.x = -10;
     }
 
-    float angularSpeed = PI * (currentBpm / 60.0f);
-    float beatDuration = 60.0f / currentBpm;
+    Vector2 mp = GetMousePosition();
+    bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
-    if (state == STATE_MENU) {
-        bgHue = Lerp(bgHue, stageMeta[selectedStage].hue, 1.0f - expf(-5.0f * dt));
+    // ------------------------------------------
+    // SCREEN 1: MODE SELECT
+    // ------------------------------------------
+    if (screen == SCR_MODE_SELECT) {
+        float modeHues[4] = { 24.0f, 185.0f, 145.0f, 345.0f };
+        bgHue = Lerp(bgHue, modeHues[(int)currentMode], 1.0f - expf(-5.0f * dt));
 
-        if (IsKeyPressed(KEY_LEFT)  || IsKeyPressed(KEY_A)) selectedStage = (selectedStage + STAGE_COUNT - 1) % STAGE_COUNT;
-        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) selectedStage = (selectedStage + 1) % STAGE_COUNT;
-        if (IsKeyPressed(KEY_UP)    || IsKeyPressed(KEY_W)) selectedStage = (selectedStage + STAGE_COUNT - 3) % STAGE_COUNT;
-        if (IsKeyPressed(KEY_DOWN)  || IsKeyPressed(KEY_S)) selectedStage = (selectedStage + 3) % STAGE_COUNT;
+        if (IsKeyPressed(KEY_LEFT)  || IsKeyPressed(KEY_A)) currentMode = (GameMode)(((int)currentMode + 3) % 4);
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) currentMode = (GameMode)(((int)currentMode + 1) % 4);
+        if (IsKeyPressed(KEY_UP)    || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+            currentMode = (GameMode)(((int)currentMode + 2) % 4);
+        }
 
-        if (IsKeyPressed(KEY_ONE))   strictness = STRICT_LENIENT;
-        if (IsKeyPressed(KEY_TWO))   strictness = STRICT_NORMAL;
-        if (IsKeyPressed(KEY_THREE)) strictness = STRICT_STRICT;
+        // Mode cards click detection
+        for (int i = 0; i < 4; i++) {
+            int col = i % 2;
+            int row = i / 2;
+            Rectangle card = { 170.0f + col * 485.0f, 185.0f + row * 165.0f, 455.0f, 140.0f };
+            if (clicked && CheckCollisionPointRec(mp, card)) {
+                currentMode = (GameMode)i;
+                if (currentMode == MODE_ENDLESS) {
+                    StartGame(0);
+                } else {
+                    UpdateWorldPreview(selectedWorld);
+                    screen = SCR_WORLD_SELECT;
+                }
+            }
+        }
 
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 mp = GetMousePosition();
-            bool clickedCard = false;
-            for (int i = 0; i < STAGE_COUNT; i++) {
-                int col = i % 3;
-                int row = i / 3;
-                Rectangle card = { 130.0f + col * 345.0f, 225.0f + row * 145.0f, 325.0f, 125.0f };
-                if (CheckCollisionPointRec(mp, card)) {
-                    clickedCard = true;
-                    if (selectedStage == i) {
-                        StartStage(selectedStage, 0);
+        // Bottom clickable settings pills
+        if (clicked) {
+            // Timing buttons
+            for (int s = 0; s < 3; s++) {
+                Rectangle b = { 255.0f + s * 98.0f, 548.0f, 90.0f, 36.0f };
+                if (CheckCollisionPointRec(mp, b)) strictness = (Strictness)s;
+            }
+            // Autoplay button
+            Rectangle autoBtn = { 665.0f, 548.0f, 100.0f, 36.0f };
+            if (CheckCollisionPointRec(mp, autoBtn)) autoPlay = !autoPlay;
+
+            // Offset - / + buttons
+            Rectangle offMinus = { 895.0f, 548.0f, 40.0f, 36.0f };
+            Rectangle offPlus  = { 1035.0f, 548.0f, 40.0f, 36.0f };
+            if (CheckCollisionPointRec(mp, offMinus)) audioOffsetMs = fmaxf(-150.0f, audioOffsetMs - 5.0f);
+            if (CheckCollisionPointRec(mp, offPlus))  audioOffsetMs = fminf(150.0f, audioOffsetMs + 5.0f);
+        }
+
+        if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
+            if (currentMode == MODE_ENDLESS) {
+                StartGame(0);
+            } else {
+                UpdateWorldPreview(selectedWorld);
+                screen = SCR_WORLD_SELECT;
+            }
+        }
+    }
+    // ------------------------------------------
+    // SCREEN 2: WORLD / COURSE SHOWCASE SELECT
+    // ------------------------------------------
+    else if (screen == SCR_WORLD_SELECT) {
+        bgHue = Lerp(bgHue, worlds[selectedWorld].hue, 1.0f - expf(-6.0f * dt));
+
+        if (IsKeyPressed(KEY_ESCAPE)) screen = SCR_MODE_SELECT;
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+            selectedWorld = (selectedWorld + WORLD_COUNT - 1) % WORLD_COUNT;
+            UpdateWorldPreview(selectedWorld);
+        }
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+            selectedWorld = (selectedWorld + 1) % WORLD_COUNT;
+            UpdateWorldPreview(selectedWorld);
+        }
+        if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
+            StartGame(0);
+        }
+
+        if (clicked) {
+            Rectangle backBtn  = { 40.0f, 28.0f, 175.0f, 42.0f };
+            Rectangle prevBtn  = { 65.0f, 315.0f, 68.0f, 90.0f };
+            Rectangle nextBtn  = { 1147.0f, 315.0f, 68.0f, 90.0f };
+            Rectangle playBtn  = { 640.0f, 455.0f, 420.0f, 64.0f };
+
+            if (CheckCollisionPointRec(mp, backBtn)) screen = SCR_MODE_SELECT;
+            else if (CheckCollisionPointRec(mp, prevBtn)) {
+                selectedWorld = (selectedWorld + WORLD_COUNT - 1) % WORLD_COUNT;
+                UpdateWorldPreview(selectedWorld);
+            }
+            else if (CheckCollisionPointRec(mp, nextBtn)) {
+                selectedWorld = (selectedWorld + 1) % WORLD_COUNT;
+                UpdateWorldPreview(selectedWorld);
+            }
+            else if (CheckCollisionPointRec(mp, playBtn)) {
+                StartGame(0);
+            }
+
+            // Bottom 1..6 world quick-jump pills
+            for (int w = 0; w < WORLD_COUNT; w++) {
+                Rectangle pill = { 340.0f + w * 102.0f, 595.0f, 88.0f, 46.0f };
+                if (CheckCollisionPointRec(mp, pill)) {
+                    selectedWorld = w;
+                    UpdateWorldPreview(selectedWorld);
+                }
+            }
+        }
+    }
+    // ------------------------------------------
+    // SCREEN 3: COUNTDOWN & GAMEPLAY
+    // ------------------------------------------
+    else if (screen == SCR_COUNTDOWN || screen == SCR_PLAYING) {
+        if (IsKeyPressed(KEY_TAB)) autoPlay = !autoPlay;
+        if (IsKeyPressed(KEY_ESCAPE)) screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
+        if (IsKeyPressed(KEY_R)) StartGame(0);
+
+        // Top-right clickable Menu button during gameplay
+        if (clicked && CheckCollisionPointRec(mp, { 1135.0f, 18.0f, 115.0f, 38.0f })) {
+            screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
+        }
+
+        float angularSpeed = PI * (currentBpm / 60.0f);
+        float beatDuration = 60.0f / currentBpm;
+
+        if (screen == SCR_COUNTDOWN) {
+            beatTimer += dt;
+            currentAngle += (cw ? angularSpeed : -angularSpeed) * dt;
+
+            if (beatTimer >= beatDuration) {
+                beatTimer -= beatDuration;
+                countdownBeats--;
+                totalBeatCount++;
+                cameraBeatPulse = 0.045f;
+
+                if (countdownBeats > 0) {
+                    PlaySound(totalBeatCount % 2 == 0 ? sndKick : sndSnare);
+                } else {
+                    traveledAngle = 0.0f;
+                    PlaySound(sndKick);
+                    int wIdx = (currentMode == MODE_ENDLESS) ? 2 : selectedWorld;
+                    PlaySound(sndMelody[worlds[wIdx].instrumentType][worlds[wIdx].melodyNotes[0]]);
+                    PlaySound(sndBass[worlds[wIdx].bassNotes[0]]);
+                    screen = SCR_PLAYING;
+                }
+            }
+        }
+        else if (screen == SCR_PLAYING) {
+            // Distinct Per-World Musical Sequencer (8th-note grid)
+            beatTimer += dt;
+            if (beatTimer >= beatDuration * 0.5f) {
+                beatTimer -= beatDuration * 0.5f;
+                totalBeatCount++;
+
+                int wIdx = (currentMode == MODE_ENDLESS) ? ((endlessTilesCleared / 16) % WORLD_COUNT) : selectedWorld;
+                int inst = worlds[wIdx].instrumentType;
+                int step8 = totalBeatCount % 8;
+                int beat4 = (totalBeatCount / 2) % 4;
+
+                // Play distinct melody note on every 8th note
+                int noteIdx = worlds[wIdx].melodyNotes[step8];
+                PlaySound(sndMelody[inst][noteIdx]);
+
+                if (totalBeatCount % 2 == 0) {
+                    cameraBeatPulse = 0.036f;
+                    PlaySound(beat4 % 2 == 0 ? sndKick : sndSnare);
+                    if (beat4 % 2 == 0) {
+                        PlaySound(sndBass[worlds[wIdx].bassNotes[beat4]]);
+                    }
+                } else {
+                    PlaySound(sndHat);
+                }
+            }
+
+            float step = angularSpeed * dt;
+            traveledAngle += step;
+            currentAngle += (cw ? step : -step);
+
+            float offsetRad = (audioOffsetMs / 1000.0f) * angularSpeed;
+            float errorAngle = (traveledAngle - offsetRad) - targetDiff;
+            float errorSec = errorAngle / angularSpeed;
+
+            float pureWin, perfWin, maxWin;
+            GetJudgmentWindows(pureWin, perfWin, maxWin);
+
+            bool triggered = autoPlay ? (errorAngle >= 0.0f) : IsHitKeyPressed();
+
+            if (triggered) {
+                if (fabsf(errorSec) <= maxWin) {
+                    float errMs = errorSec * 1000.0f;
+                    Color jCol = GREEN;
+                    std::string jText = "PERFECT!";
+                    float accVal = 1.0f;
+                    bool isGoodHit = true;
+
+                    if (autoPlay || fabsf(errorSec) <= pureWin) {
+                        jText = "PURE PERFECT!"; jCol = { 70, 255, 195, 255 }; accVal = 1.0f; perfectCount++;
+                    } else if (errorSec < 0) {
+                        if (fabsf(errorSec) <= perfWin) { jText = "EARLY"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
+                        else { jText = "TOO EARLY"; jCol = GOLD; accVal = 0.50f; isGoodHit = false; }
                     } else {
-                        selectedStage = i;
+                        if (fabsf(errorSec) <= perfWin) { jText = "LATE"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
+                        else { jText = "TOO LATE"; jCol = GOLD; accVal = 0.50f; isGoodHit = false; }
                     }
-                    break;
-                }
-            }
-            if (!clickedCard) {
-                StartStage(selectedStage, 0);
-            }
-        }
-        else if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
-            StartStage(selectedStage, 0);
-        }
-    }
-    else if (state == STATE_COUNTDOWN) {
-        beatTimer += dt;
-        currentAngle += (cw ? angularSpeed : -angularSpeed) * dt;
 
-        if (beatTimer >= beatDuration) {
-            beatTimer -= beatDuration;
-            countdownBeats--;
-            totalBeatCount++;
-            cameraBeatPulse = 0.045f;
+                    // Perfectionist Mode fails on ANY non-green hit
+                    if (currentMode == MODE_PERFECTIONIST && !isGoodHit) {
+                        PlaySound(sndFail);
+                        screenShake = 16.0f;
+                        failReason = "PERFECTIONIST MODE: IMPERFECT TIMING!";
+                        SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
+                        screen = SCR_GAMEOVER;
+                    } else {
+                        hitCount++;
+                        streakCount++;
+                        accuracySum += accVal;
+                        hitTicks.push_back({ autoPlay ? 0.0f : errMs, jCol, 1.0f });
+                        if (hitTicks.size() > 26) hitTicks.pop_front();
 
-            if (countdownBeats > 0) {
-                PlaySound(totalBeatCount % 2 == 0 ? sndKick : sndSnare);
-            } else {
-                traveledAngle = 0.0f;
-                PlaySound(sndKick);
-                PlaySound(sndPad[(selectedStage) % 4]);
-                state = STATE_PLAYING;
-            }
-        }
-    }
-    else if (state == STATE_PLAYING) {
-        if (IsKeyPressed(KEY_ESCAPE)) { state = STATE_MENU; }
-        if (IsKeyPressed(KEY_R))      { StartStage(selectedStage, 0); }
+                        Vector2 hitTilePos = tiles[currentTile + 1].pos;
+                        AddPopup(jText, hitTilePos, jCol);
+                        SpawnHitParticles(hitTilePos, isFirePivot ? SKYBLUE : ORANGE, 18);
+                        SpawnShockwave(hitTilePos, jCol, 72.0f);
+                        PlaySound(sndHit);
 
-        beatTimer += dt;
-        if (beatTimer >= beatDuration * 0.5f) {
-            beatTimer -= beatDuration * 0.5f;
-            totalBeatCount++;
-            if (totalBeatCount % 2 == 0) {
-                int beatIdx = totalBeatCount / 2;
-                cameraBeatPulse = 0.038f;
-                PlaySound(beatIdx % 2 == 0 ? sndKick : sndSnare);
-                if (beatIdx % 2 == 0) {
-                    PlaySound(sndPad[(beatIdx / 2 + selectedStage) % 4]);
-                }
-            } else {
-                PlaySound(sndHat);
-            }
-        }
-
-        float step = angularSpeed * dt;
-        traveledAngle += step;
-        currentAngle += (cw ? step : -step);
-
-        float offsetRad = (audioOffsetMs / 1000.0f) * angularSpeed;
-        float errorAngle = (traveledAngle - offsetRad) - targetDiff;
-        float errorSec = errorAngle / angularSpeed;
-
-        float pureWin, perfWin, maxWin;
-        GetJudgmentWindows(pureWin, perfWin, maxWin);
-
-        bool triggered = autoPlay ? (errorAngle >= 0.0f) : IsHitKeyPressed();
-
-        if (triggered) {
-            if (fabsf(errorSec) <= maxWin) {
-                float errMs = errorSec * 1000.0f;
-                Color jCol = GREEN;
-                std::string jText = "PERFECT!";
-                float accVal = 1.0f;
-
-                if (autoPlay || fabsf(errorSec) <= pureWin) {
-                    jText = "PURE PERFECT!"; jCol = { 70, 255, 195, 255 }; accVal = 1.0f; perfectCount++;
-                } else if (errorSec < 0) {
-                    if (fabsf(errorSec) <= perfWin) { jText = "EARLY"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
-                    else { jText = "TOO EARLY"; jCol = GOLD; accVal = 0.55f; }
-                } else {
-                    if (fabsf(errorSec) <= perfWin) { jText = "LATE"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
-                    else { jText = "TOO LATE"; jCol = GOLD; accVal = 0.55f; }
-                }
-
-                hitCount++;
-                accuracySum += accVal;
-                hitTicks.push_back({ autoPlay ? 0.0f : errMs, jCol, 1.0f });
-                if (hitTicks.size() > 26) hitTicks.pop_front();
-
-                Vector2 hitTilePos = tiles[currentTile + 1].pos;
-                AddPopup(jText, hitTilePos, jCol);
-                SpawnHitParticles(hitTilePos, isFirePivot ? SKYBLUE : ORANGE, 18);
-                SpawnShockwave(hitTilePos, jCol, 72.0f);
-                PlaySound(sndHit);
-
-                screenShake = 5.0f;
-                currentTile++;
-                tiles[currentTile].cleared = true;
-                tiles[currentTile].hitAnim = 1.0f;
-
-                if (tiles[currentTile].checkpoint) {
-                    lastCheckpoint = currentTile;
-                    AddPopup("CHECKPOINT!", hitTilePos, GREEN);
-                    SpawnShockwave(hitTilePos, GREEN, 110.0f);
-                }
-
-                if (!tiles[currentTile].midspin) {
-                    isFirePivot = !isFirePivot;
-                }
-
-                if (currentTile >= (int)tiles.size() - 1) {
-                    float finalAcc = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
-                    if (!autoPlay) {
-                        stageMeta[selectedStage].cleared = true;
-                        if (finalAcc > stageMeta[selectedStage].bestAcc) {
-                            stageMeta[selectedStage].bestAcc = finalAcc;
-                        }
+                        screenShake = 4.5f;
+                        AdvanceTileAfterHit(hitTilePos, false);
                     }
-                    PlaySound(sndClear);
-                    SpawnShockwave(hitTilePos, GOLD, 160.0f);
-                    state = STATE_CLEAR;
                 } else {
-                    Vector2 oldPivot = pivotPos;
-                    SetupOrbitForTile(currentTile, oldPivot);
+                    // Too early input
+                    if (currentMode == MODE_ZEN) {
+                        screenShake = 8.0f;
+                        streakCount = 0;
+                        AddPopup("TOO EARLY!", pivotPos, ORANGE);
+                    } else {
+                        PlaySound(sndFail);
+                        screenShake = 16.0f;
+                        failReason = "TOO EARLY! (OVERLOAD)";
+                        SpawnHitParticles(pivotPos, RED, 32);
+                        SpawnShockwave(pivotPos, RED, 120.0f);
+                        screen = SCR_GAMEOVER;
+                    }
                 }
-            } else {
-                PlaySound(sndFail);
-                screenShake = 16.0f;
-                failReason = "TOO EARLY! (OVERLOAD)";
-                SpawnHitParticles(pivotPos, RED, 32);
-                SpawnShockwave(pivotPos, RED, 120.0f);
-                state = STATE_GAMEOVER;
+            }
+            else if (errorSec > maxWin) {
+                // Missed beat
+                if (currentMode == MODE_ZEN) {
+                    streakCount = 0;
+                    hitCount++;
+                    Vector2 hitTilePos = tiles[currentTile + 1].pos;
+                    AddPopup("MISSED (ZEN)", hitTilePos, RED);
+                    AdvanceTileAfterHit(hitTilePos, true);
+                } else {
+                    PlaySound(sndFail);
+                    screenShake = 16.0f;
+                    failReason = "MISSED THE BEAT!";
+                    SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
+                    SpawnShockwave(tiles[currentTile + 1].pos, RED, 120.0f);
+                    screen = SCR_GAMEOVER;
+                }
             }
         }
-        else if (errorSec > maxWin) {
-            PlaySound(sndFail);
-            screenShake = 16.0f;
-            failReason = "MISSED THE BEAT!";
-            SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
-            SpawnShockwave(tiles[currentTile + 1].pos, RED, 120.0f);
-            state = STATE_GAMEOVER;
-        }
     }
-    else if (state == STATE_GAMEOVER) {
-        if (IsKeyPressed(KEY_ESCAPE)) { state = STATE_MENU; }
-        else if (IsKeyPressed(KEY_R)) { StartStage(selectedStage, 0); }
-        else if (IsHitKeyPressed())   { StartStage(selectedStage, lastCheckpoint); }
+    // ------------------------------------------
+    // SCREEN 4 & 5: GAMEOVER / CLEAR
+    // ------------------------------------------
+    else if (screen == SCR_GAMEOVER) {
+        if (IsKeyPressed(KEY_ESCAPE)) screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
+        else if (IsKeyPressed(KEY_R)) StartGame(0);
+        else if (IsHitKeyPressed())   StartGame(currentMode == MODE_JOURNEY ? lastCheckpoint : 0);
     }
-    else if (state == STATE_CLEAR) {
-        if (IsKeyPressed(KEY_ESCAPE)) { state = STATE_MENU; }
-        else if (IsHitKeyPressed())   {
-            selectedStage = (selectedStage + 1) % STAGE_COUNT;
-            StartStage(selectedStage, 0);
+    else if (screen == SCR_CLEAR) {
+        if (IsKeyPressed(KEY_ESCAPE)) screen = SCR_WORLD_SELECT;
+        else if (IsHitKeyPressed()) {
+            selectedWorld = (selectedWorld + 1) % WORLD_COUNT;
+            UpdateWorldPreview(selectedWorld);
+            StartGame(0);
         }
     }
 
-    if (!tiles.empty() && state != STATE_MENU) {
+    // Camera & Particle Updates
+    if (!tiles.empty() && (screen == SCR_COUNTDOWN || screen == SCR_PLAYING || screen == SCR_GAMEOVER || screen == SCR_CLEAR)) {
         camera.target = Vector2Lerp(camera.target, pivotPos, 1.0f - expf(-9.0f * dt));
         cameraBeatPulse = Lerp(cameraBeatPulse, 0.0f, 1.0f - expf(-12.0f * dt));
         camera.zoom = 1.0f + cameraBeatPulse;
@@ -755,7 +1063,7 @@ void UpdateAndDrawFrame() {
         firePos = isFirePivot ? pivotPos : orbitPos;
         icePos  = isFirePivot ? orbitPos : pivotPos;
 
-        if (state == STATE_PLAYING || state == STATE_COUNTDOWN) {
+        if (screen == SCR_PLAYING || screen == SCR_COUNTDOWN) {
             fireTrail.push_back({ firePos, { 255, 80, 45, 255 }, 0.78f });
             iceTrail.push_back({ icePos, { 45, 205, 255, 255 }, 0.78f });
             if (fireTrail.size() > 24) fireTrail.pop_front();
@@ -796,51 +1104,172 @@ void UpdateAndDrawFrame() {
         float pulseAlpha = 0.12f + 0.08f * sinf(m.phase);
         DrawCircleV(m.pos, m.size, Fade(ColorFromHSV(bgHue, 0.5f, 0.95f), pulseAlpha));
     }
-    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 250.0f + cameraBeatPulse * 420.0f, Fade(WHITE, 0.045f));
-    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 450.0f + cameraBeatPulse * 620.0f, Fade(WHITE, 0.03f));
+    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 260.0f + cameraBeatPulse * 420.0f, Fade(WHITE, 0.045f));
+    DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 460.0f + cameraBeatPulse * 620.0f, Fade(WHITE, 0.03f));
 
-    if (state == STATE_MENU) {
-        DrawTextCentered("A DANCE OF FIRE AND ICE", SCREEN_WIDTH / 2.0f, 65.0f, 54.0f, WHITE);
-        DrawTextCentered("C++ WEBASSEMBLY RHYTHM ENGINE", SCREEN_WIDTH / 2.0f, 128.0f, 20.0f, ColorFromHSV(bgHue, 0.55f, 0.95f));
+    // ------------------------------------------
+    // RENDER 1: CLEAN 2x2 MODE SELECT SCREEN
+    // ------------------------------------------
+    if (screen == SCR_MODE_SELECT) {
+        DrawTextCentered("A DANCE OF FIRE AND ICE", SCREEN_WIDTH / 2.0f, 48.0f, 50.0f, WHITE);
+        DrawTextCentered("SELECT GAME MODE", SCREEN_WIDTH / 2.0f, 108.0f, 20.0f, SKYBLUE);
 
-        for (int i = 0; i < STAGE_COUNT; i++) {
-            int col = i % 3;
-            int row = i / 3;
-            float cx = 130.0f + col * 345.0f;
-            float cy = 225.0f + row * 145.0f;
-            bool sel = (i == selectedStage);
-            Color themeCol = ColorFromHSV(stageMeta[i].hue, 0.65f, 0.95f);
+        const char* modeTitles[4] = { "WORLD TOUR", "ENDLESS RUSH", "ZEN PRACTICE", "PERFECTIONIST" };
+        const char* modeBadges[4] = { "6 WORLDS", "SURVIVAL", "NO GAME OVER", "1-HIT CHALLENGE" };
+        const char* modeDescs[4]  = {
+            "Progress from Easy to Master across 6 distinct songs & courses.",
+            "Infinite procedural track! Survive as many tiles as possible.",
+            "Relax and practice any world without failing when you miss.",
+            "Every hit must be Pure Perfect or Perfect. Zero margin for error."
+        };
+        float modeHues[4] = { 24.0f, 185.0f, 145.0f, 345.0f };
 
-            DrawRectangleRounded({ cx + 4, cy + 6, 325.0f, 125.0f }, 0.16f, 8, Fade(BLACK, 0.45f));
-            DrawRectangleRounded({ cx, cy, 325.0f, 125.0f }, 0.16f, 8,
-                                 sel ? Fade(themeCol, 0.24f) : Fade(WHITE, 0.06f));
-            DrawRectangleRoundedLinesEx({ cx, cy, 325.0f, 125.0f }, 0.16f, 8, sel ? 2.5f : 1.0f,
-                                        sel ? themeCol : Fade(WHITE, 0.18f));
+        for (int i = 0; i < 4; i++) {
+            int col = i % 2;
+            int row = i / 2;
+            Rectangle card = { 170.0f + col * 485.0f, 185.0f + row * 165.0f, 455.0f, 140.0f };
+            bool sel = ((int)currentMode == i) || CheckCollisionPointRec(mp, card);
+            Color theme = ColorFromHSV(modeHues[i], 0.65f, 0.95f);
 
-            DrawTextUI(stageMeta[i].code, cx + 18, cy + 14, 28.0f, themeCol);
-            DrawTextUI(TextFormat("%.0f BPM", stageMeta[i].bpm), cx + 225, cy + 18, 18.0f, LIGHTGRAY);
-            DrawTextUI(stageMeta[i].title, cx + 18, cy + 48, 22.0f, sel ? WHITE : LIGHTGRAY);
-            DrawTextUI(stageMeta[i].subtitle, cx + 18, cy + 76, 16.0f, GRAY);
+            DrawCardBox(card, 0.16f,
+                        sel ? Fade(theme, 0.22f) : Color{ 20, 24, 38, 235 },
+                        sel ? theme : Fade(WHITE, 0.16f),
+                        sel ? 2.5f : 1.5f);
 
-            std::string starsStr = "";
-            for (int s = 0; s < 5; s++) starsStr += (s < stageMeta[i].stars) ? "*" : "-";
-            DrawTextUI(TextFormat("DIFF: %s", starsStr.c_str()), cx + 18, cy + 98, 15.0f, GOLD);
+            DrawTextUI(modeTitles[i], card.x + 24, card.y + 20, 28.0f, WHITE);
+            DrawRectangleRounded({ card.x + 285, card.y + 22, 148.0f, 26.0f }, 0.4f, 6, Fade(theme, 0.25f));
+            DrawTextCentered(modeBadges[i], card.x + 359, card.y + 27, 14.0f, theme);
 
-            if (stageMeta[i].cleared) {
-                DrawTextUI(TextFormat("CLEAR %.1f%%", stageMeta[i].bestAcc), cx + 195, cy + 98, 15.0f, GREEN);
+            DrawTextUI(modeDescs[i], card.x + 24, card.y + 68, 16.0f, LIGHTGRAY);
+            if (i == 1 && bestEndlessScore > 0) {
+                DrawTextUI(TextFormat("BEST RECORD: %d TILES", bestEndlessScore), card.x + 24, card.y + 102, 16.0f, GOLD);
+            } else {
+                DrawTextUI("Click or Press [SPACE] to Enter ->", card.x + 24, card.y + 102, 15.0f, theme);
             }
         }
 
-        const char* strictNames[3] = { "LENIENT [1]", "NORMAL [2]", "STRICT [3]" };
-        DrawTextCentered(TextFormat("JUDGMENT: %s    |    AUTOPLAY: %s [TAB]    |    OFFSET: %.0f ms ([ / ])",
-                         strictNames[strictness], autoPlay ? "ON" : "OFF", audioOffsetMs),
-                         SCREEN_WIDTH / 2.0f, 545.0f, 20.0f, GOLD);
-        DrawTextCentered("Select a Stage with Arrow Keys or Mouse, Press [SPACE] to Play",
-                         SCREEN_WIDTH / 2.0f, 595.0f, 22.0f, WHITE);
+        // Clean Clickable Settings Bar
+        DrawCardBox({ 155.0f, 532.0f, 970.0f, 68.0f }, 0.25f, Color{ 18, 22, 34, 235 }, Fade(WHITE, 0.14f), 1.5f);
+
+        DrawTextUI("TIMING:", 180.0f, 556.0f, 17.0f, LIGHTGRAY);
+        const char* sLabels[3] = { "EASY", "NORMAL", "STRICT" };
+        for (int s = 0; s < 3; s++) {
+            Rectangle b = { 255.0f + s * 98.0f, 548.0f, 90.0f, 36.0f };
+            bool active = ((int)strictness == s);
+            DrawRectangleRounded(b, 0.35f, 6, active ? SKYBLUE : Fade(WHITE, 0.08f));
+            DrawTextCentered(sLabels[s], b.x + b.width * 0.5f, b.y + 9.0f, 16.0f, active ? BLACK : WHITE, false);
+        }
+
+        DrawTextUI("AUTOPLAY:", 575.0f, 556.0f, 17.0f, LIGHTGRAY);
+        Rectangle autoBtn = { 665.0f, 548.0f, 100.0f, 36.0f };
+        DrawRectangleRounded(autoBtn, 0.35f, 6, autoPlay ? GOLD : Fade(WHITE, 0.08f));
+        DrawTextCentered(autoPlay ? "ON" : "OFF", autoBtn.x + 50.0f, autoBtn.y + 9.0f, 16.0f, autoPlay ? BLACK : WHITE, false);
+
+        DrawTextUI("SYNC:", 840.0f, 556.0f, 17.0f, LIGHTGRAY);
+        Rectangle offMinus = { 895.0f, 548.0f, 40.0f, 36.0f };
+        Rectangle offPlus  = { 1035.0f, 548.0f, 40.0f, 36.0f };
+        DrawRectangleRounded(offMinus, 0.35f, 6, Fade(WHITE, 0.12f));
+        DrawRectangleRounded(offPlus, 0.35f, 6, Fade(WHITE, 0.12f));
+        DrawTextCentered("-", offMinus.x + 20.0f, offMinus.y + 7.0f, 20.0f, WHITE, false);
+        DrawTextCentered("+", offPlus.x + 20.0f, offPlus.y + 7.0f, 20.0f, WHITE, false);
+        DrawTextCentered(TextFormat("%.0f ms", audioOffsetMs), 985.0f, 556.0f, 17.0f, WHITE);
+
         EndDrawing();
         return;
     }
 
+    // ------------------------------------------
+    // RENDER 2: FOCUSED WORLD SHOWCASE SELECT
+    // ------------------------------------------
+    if (screen == SCR_WORLD_SELECT) {
+        WorldInfo& w = worlds[selectedWorld];
+        Color theme = ColorFromHSV(w.hue, 0.68f, 0.95f);
+
+        // Top Bar
+        Rectangle backBtn = { 40.0f, 28.0f, 175.0f, 42.0f };
+        DrawCardBox(backBtn, 0.3f, Color{ 24, 28, 44, 240 }, Fade(WHITE, 0.25f), 1.5f);
+        DrawTextCentered("< MODES [ESC]", backBtn.x + backBtn.width * 0.5f, backBtn.y + 11.0f, 17.0f, WHITE);
+
+        const char* modeBanner = (currentMode == MODE_JOURNEY) ? "MODE: WORLD TOUR" :
+                                 (currentMode == MODE_ZEN)     ? "MODE: ZEN PRACTICE (NO-FAIL)" :
+                                                                 "MODE: PERFECTIONIST CHALLENGE";
+        DrawTextCentered(modeBanner, SCREEN_WIDTH / 2.0f, 36.0f, 22.0f, theme);
+
+        // Left / Right Carousel Arrows
+        Rectangle prevBtn = { 65.0f, 315.0f, 68.0f, 90.0f };
+        Rectangle nextBtn = { 1147.0f, 315.0f, 68.0f, 90.0f };
+        DrawCardBox(prevBtn, 0.3f, Color{ 24, 28, 44, 240 }, theme, 2.0f);
+        DrawCardBox(nextBtn, 0.3f, Color{ 24, 28, 44, 240 }, theme, 2.0f);
+        DrawTextCentered("<", prevBtn.x + 34.0f, prevBtn.y + 24.0f, 42.0f, WHITE);
+        DrawTextCentered(">", nextBtn.x + 34.0f, nextBtn.y + 24.0f, 42.0f, WHITE);
+
+        // Center Showcase Card
+        Rectangle showcase = { 165.0f, 115.0f, 950.0f, 435.0f };
+        DrawCardBox(showcase, 0.08f, Color{ 18, 22, 35, 245 }, theme, 2.5f);
+
+        // Left Half: Course Shape Live Mini-Map Preview
+        Rectangle mapBox = { 205.0f, 155.0f, 390.0f, 355.0f };
+        DrawRectangleRounded(mapBox, 0.1f, 8, Color{ 12, 15, 24, 255 });
+        DrawTextCentered("COURSE SHAPE PREVIEW", mapBox.x + mapBox.width * 0.5f, mapBox.y + 16.0f, 15.0f, GRAY);
+
+        Vector2 mapCenter = { mapBox.x + mapBox.width * 0.5f, mapBox.y + mapBox.height * 0.53f };
+        float mapRadius = 125.0f;
+        for (size_t i = 0; i + 1 < previewPoints.size(); i++) {
+            Vector2 p1 = { mapCenter.x + previewPoints[i].x * mapRadius, mapCenter.y + previewPoints[i].y * mapRadius };
+            Vector2 p2 = { mapCenter.x + previewPoints[i + 1].x * mapRadius, mapCenter.y + previewPoints[i + 1].y * mapRadius };
+            DrawLineEx(p1, p2, 6.0f, Fade(theme, 0.75f));
+            DrawCircleV(p1, 4.5f, WHITE);
+        }
+        if (!previewPoints.empty()) {
+            Vector2 startPt = { mapCenter.x + previewPoints[0].x * mapRadius, mapCenter.y + previewPoints[0].y * mapRadius };
+            Vector2 endPt   = { mapCenter.x + previewPoints.back().x * mapRadius, mapCenter.y + previewPoints.back().y * mapRadius };
+            DrawCircleV(startPt, 7.0f, SKYBLUE);
+            DrawCircleV(endPt, 7.0f, GOLD);
+        }
+
+        // Right Half: Clean World Details & Big Play Button
+        float rx = 640.0f;
+        DrawTextUI(TextFormat("WORLD %d  •  %s", selectedWorld + 1, w.diffLabel), rx, 155.0f, 20.0f, theme);
+        DrawTextUI(w.name, rx, 188.0f, 40.0f, WHITE);
+
+        // Segmented Difficulty Bar
+        DrawTextUI("DIFFICULTY:", rx, 248.0f, 16.0f, GRAY);
+        for (int d = 0; d < 6; d++) {
+            Color segCol = (d < w.difficultyLevel) ? theme : Fade(WHITE, 0.12f);
+            DrawRectangleRounded({ rx + 115.0f + d * 48.0f, 246.0f, 40.0f, 18.0f }, 0.3f, 4, segCol);
+        }
+
+        DrawTextUI(TextFormat("MUSIC:  %s  (%.0f BPM Steady)", w.songStyle, w.bpm), rx, 290.0f, 19.0f, LIGHTGRAY);
+        DrawTextUI(TextFormat("COURSE: %s", w.gimmickDesc), rx, 325.0f, 18.0f, LIGHTGRAY);
+
+        if (w.cleared) {
+            DrawTextUI(TextFormat("STATUS: CLEARED!  (Best Accuracy: %.1f%%)", w.bestAcc), rx, 368.0f, 18.0f, GREEN);
+        } else {
+            DrawTextUI("STATUS: NOT CLEARED YET", rx, 368.0f, 18.0f, GRAY);
+        }
+
+        // Big Play Button
+        Rectangle playBtn = { rx, 445.0f, 420.0f, 64.0f };
+        bool hoverPlay = CheckCollisionPointRec(mp, playBtn);
+        DrawRectangleRounded(playBtn, 0.25f, 8, hoverPlay ? WHITE : theme);
+        DrawTextCentered("START WORLD  [SPACE]", playBtn.x + playBtn.width * 0.5f, playBtn.y + 18.0f, 24.0f, BLACK, false);
+
+        // Bottom Quick-Jump World Pills (1 to 6)
+        for (int i = 0; i < WORLD_COUNT; i++) {
+            Rectangle pill = { 340.0f + i * 102.0f, 595.0f, 88.0f, 46.0f };
+            bool isSel = (i == selectedWorld);
+            Color pCol = ColorFromHSV(worlds[i].hue, 0.65f, 0.95f);
+            DrawCardBox(pill, 0.3f, isSel ? Fade(pCol, 0.32f) : Color{ 20, 24, 38, 230 }, isSel ? pCol : Fade(WHITE, 0.16f), 2.0f);
+            DrawTextCentered(TextFormat("W-%d", i + 1), pill.x + 44.0f, pill.y + 13.0f, 18.0f, isSel ? WHITE : LIGHTGRAY);
+        }
+
+        EndDrawing();
+        return;
+    }
+
+    // ------------------------------------------
+    // RENDER 3: WORLD CAMERA GAMEPLAY
+    // ------------------------------------------
     BeginMode2D(camera);
     if (!tiles.empty()) {
         Vector2 renderPivot = tiles[0].pos;
@@ -857,13 +1286,14 @@ void UpdateAndDrawFrame() {
             }
         }
 
+        // Orbit guide & Remaining angle arc
         DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.16f));
-        if (state == STATE_PLAYING) {
+        if (screen == SCR_PLAYING) {
             float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
             float startDeg = currentAngle * RAD2DEG;
             float endDeg   = (currentAngle + (cw ? 1.0f : -1.0f) * targetDiff * remRatio) * RAD2DEG;
             DrawRing(pivotPos, TILE_DIST - 6.0f, TILE_DIST + 2.0f, startDeg, endDeg, 24,
-                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.22f));
+                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.24f));
         }
 
         float timeNow = (float)GetTime();
@@ -871,7 +1301,7 @@ void UpdateAndDrawFrame() {
             float scale = 1.0f + tiles[i].hitAnim * 0.28f;
             Color rimCol = (i == (size_t)currentTile) ? WHITE :
                            (tiles[i].cleared ? Color{ 110, 150, 210, 255 } : Color{ 70, 86, 122, 255 });
-            if (i == tiles.size() - 1) rimCol = GOLD;
+            if (currentMode != MODE_ENDLESS && i == tiles.size() - 1) rimCol = GOLD;
 
             if (tiles[i].midspin) {
                 DrawPoly(tiles[i].pos, 3, 26.0f * scale, timeNow * 70.0f, MAGENTA);
@@ -882,7 +1312,7 @@ void UpdateAndDrawFrame() {
                 DrawCircleV(tiles[i].pos, 18.0f * scale, { 22, 26, 40, 255 });
             }
 
-            if (i == tiles.size() - 1) {
+            if (currentMode != MODE_ENDLESS && i == tiles.size() - 1) {
                 DrawRing(tiles[i].pos, 11.0f, 15.0f, timeNow * 140.0f, timeNow * 140.0f + 240.0f, 24, GOLD);
                 DrawCircleV(tiles[i].pos, 7.0f + 2.0f * sinf(timeNow * 6.0f), WHITE);
             }
@@ -893,7 +1323,7 @@ void UpdateAndDrawFrame() {
                 DrawRing(tiles[i].pos, 9.0f, 13.5f, rot + 180.0f, rot + 320.0f, 16, { 240, 95, 255, 255 });
             }
 
-            if (tiles[i].checkpoint) {
+            if (tiles[i].checkpoint && currentMode == MODE_JOURNEY) {
                 DrawCircleLinesV(tiles[i].pos, 29.5f, GREEN);
                 DrawCircleLinesV(tiles[i].pos, 32.5f, Fade(GREEN, 0.45f));
             }
@@ -930,18 +1360,32 @@ void UpdateAndDrawFrame() {
     }
     EndMode2D();
 
-    int progress = (int)((float)currentTile / (tiles.size() - 1) * 100.0f);
+    // --- CLEAN HUD ---
     float accPct = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
 
-    DrawTextUI(TextFormat("%s  %s", stageMeta[selectedStage].code, stageMeta[selectedStage].title),
-               28.0f, 20.0f, 24.0f, WHITE);
-    DrawTextUI(TextFormat("PROGRESS: %d%%   |   ACCURACY: %.1f%%   |   BPM: %.0f",
-               progress, accPct, currentBpm), 28.0f, 50.0f, 18.0f, LIGHTGRAY);
+    if (currentMode == MODE_ENDLESS) {
+        DrawTextUI(TextFormat("ENDLESS RUSH  •  TILES: %d  (BEST: %d)", endlessTilesCleared, bestEndlessScore), 28.0f, 20.0f, 24.0f, WHITE);
+        DrawTextUI(TextFormat("ACCURACY: %.1f%%   |   STREAK: %d   |   BPM: %.0f", accPct, streakCount, currentBpm), 28.0f, 50.0f, 18.0f, SKYBLUE);
+    } else {
+        float ratio = (float)currentTile / (float)(tiles.size() - 1);
+        DrawTextUI(TextFormat("WORLD %d: %s", selectedWorld + 1, worlds[selectedWorld].name), 28.0f, 18.0f, 24.0f, WHITE);
 
-    if (autoPlay) {
-        DrawTextUI("[AUTOPLAY ON]", SCREEN_WIDTH - 205.0f, 22.0f, 20.0f, GOLD);
+        // Visual Progress Bar
+        DrawRectangleRounded({ 28.0f, 52.0f, 260.0f, 12.0f }, 0.5f, 4, Fade(WHITE, 0.15f));
+        DrawRectangleRounded({ 28.0f, 52.0f, 260.0f * ratio, 12.0f }, 0.5f, 4, ColorFromHSV(bgHue, 0.65f, 0.95f));
+        DrawTextUI(TextFormat("%d%%   •   ACC: %.1f%%", (int)(ratio * 100.0f), accPct), 300.0f, 48.0f, 18.0f, LIGHTGRAY);
     }
 
+    // Top-Right Menu Button & Autoplay indicator
+    Rectangle menuBtn = { 1135.0f, 18.0f, 115.0f, 38.0f };
+    DrawCardBox(menuBtn, 0.3f, Color{ 20, 24, 38, 220 }, Fade(WHITE, 0.25f), 1.5f);
+    DrawTextCentered("MENU [ESC]", menuBtn.x + 57.5f, menuBtn.y + 10.0f, 15.0f, WHITE);
+
+    if (autoPlay) {
+        DrawTextUI("[AUTOPLAY]", 1005.0f, 26.0f, 18.0f, GOLD);
+    }
+
+    // Bottom Timing Meter with Clear Labels
     int barW = 380, barH = 10;
     int barX = SCREEN_WIDTH / 2 - barW / 2;
     int barY = SCREEN_HEIGHT - 44;
@@ -951,33 +1395,41 @@ void UpdateAndDrawFrame() {
     DrawRectangle(barX + 140, barY, barW - 280, barH, Fade(SKYBLUE, 0.85f));
     DrawRectangle(SCREEN_WIDTH / 2 - 2, barY - 6, 4, barH + 12, WHITE);
 
+    DrawTextUI("EARLY", (float)barX - 58.0f, (float)barY - 3.0f, 14.0f, GOLD);
+    DrawTextUI("LATE", (float)barX + barW + 12.0f, (float)barY - 3.0f, 14.0f, GOLD);
+
     for (const auto& tk : hitTicks) {
         float clamped = Clamp(tk.errorMs, -160.0f, 160.0f);
         int tx = SCREEN_WIDTH / 2 + (int)((clamped / 160.0f) * (barW / 2.0f));
         DrawRectangle(tx - 2, barY - 5, 4, barH + 10, Fade(tk.color, tk.alpha));
     }
 
-    if (state == STATE_COUNTDOWN) {
+    // --- OVERLAYS ---
+    if (screen == SCR_COUNTDOWN) {
         const char* cdText = (countdownBeats == 3) ? "3" :
                              (countdownBeats == 2) ? "2" :
                              (countdownBeats == 1) ? "1" : "GET READY";
         DrawTextCentered(cdText, SCREEN_WIDTH / 2.0f, 135.0f, 64.0f, GOLD);
     }
-    else if (state == STATE_GAMEOVER) {
-        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.68f));
-        DrawTextCentered("OVERLOAD!", SCREEN_WIDTH / 2.0f, 225.0f, 58.0f, RED);
-        DrawTextCentered(failReason.c_str(), SCREEN_WIDTH / 2.0f, 298.0f, 24.0f, LIGHTGRAY);
-        const char* retryMsg = (lastCheckpoint > 0)
-            ? "[SPACE] Checkpoint   |   [R] Full Restart   |   [ESC] Stage Select"
-            : "[SPACE] Retry   |   [ESC] Stage Select";
-        DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 368.0f, 22.0f, WHITE);
+    else if (screen == SCR_GAMEOVER) {
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.70f));
+        DrawTextCentered("SHATTERED!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, RED);
+        DrawTextCentered(failReason.c_str(), SCREEN_WIDTH / 2.0f, 290.0f, 24.0f, LIGHTGRAY);
+        if (currentMode == MODE_ENDLESS) {
+            DrawTextCentered(TextFormat("Survived %d Tiles  (Best: %d)", endlessTilesCleared, bestEndlessScore),
+                             SCREEN_WIDTH / 2.0f, 332.0f, 22.0f, SKYBLUE);
+        }
+        const char* retryMsg = (currentMode == MODE_JOURNEY && lastCheckpoint > 0)
+            ? "[SPACE] Checkpoint   |   [R] Full Restart   |   [ESC] Menu"
+            : "[SPACE] Try Again   |   [ESC] Menu";
+        DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 390.0f, 22.0f, WHITE);
     }
-    else if (state == STATE_CLEAR) {
-        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.68f));
-        DrawTextCentered("STAGE CLEAR!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, GOLD);
+    else if (screen == SCR_CLEAR) {
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.70f));
+        DrawTextCentered("WORLD CLEARED!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, GOLD);
         DrawTextCentered(TextFormat("Final Accuracy: %.2f%%   (Pure Perfect: %d / %d)", accPct, perfectCount, hitCount),
                          SCREEN_WIDTH / 2.0f, 292.0f, 24.0f, SKYBLUE);
-        DrawTextCentered("[SPACE] Next Stage   |   [ESC] Stage Select",
+        DrawTextCentered("[SPACE] Next World   |   [ESC] World Select",
                          SCREEN_WIDTH / 2.0f, 365.0f, 22.0f, WHITE);
     }
 
@@ -996,7 +1448,7 @@ int main() {
     }
 
     InitAmbientMotes();
-    BuildStage(0);
+    UpdateWorldPreview(0);
 
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(UpdateAndDrawFrame, 0, 1);
@@ -1014,7 +1466,10 @@ int main() {
         UnloadSound(sndHit); UnloadSound(sndKick); UnloadSound(sndSnare);
         UnloadSound(sndHat); UnloadSound(sndSwirl); UnloadSound(sndFail);
         UnloadSound(sndClear);
-        for (int i = 0; i < 4; i++) UnloadSound(sndPad[i]);
+        for (int inst = 0; inst < 6; inst++) {
+            for (int n = 0; n < 18; n++) UnloadSound(sndMelody[inst][n]);
+        }
+        for (int n = 0; n < 18; n++) UnloadSound(sndBass[n]);
         CloseAudioDevice();
     }
     CloseWindow();
