@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>얼음과 불의 춤 - C++ Web Edition</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #0b0d14;
+      color: #e2e8f0;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-wrapper {
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #10121c;
+    }
+    canvas.emscripten {
+      display: block;
+      width: 1280px;
+      height: 720px;
+      max-width: 96vw;
+      max-height: 84vh;
+      aspect-ratio: 16 / 9;
+      outline: none;
+    }
+    #status {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      color: #38bdf8;
+      pointer-events: none;
+    }
+    .footer-guide {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #94a3b8;
+      text-align: center;
+    }
+    .footer-guide kbd {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: #f8fafc;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-wrapper">
+    <div id="status">게임 엔진 로딩 중...</div>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  </div>
+  <div class="footer-guide">
+    타격: <kbd>SPACE</kbd> / <kbd>Z</kbd> / <kbd>X</kbd> / <kbd>J</kbd> / <kbd>K</kbd> / <kbd>클릭</kbd> &nbsp;|&nbsp;
+    오토플레이: <kbd>TAB</kbd> &nbsp;|&nbsp;
+    싱크 조절: <kbd>[</kbd> <kbd>]</kbd> &nbsp;|&nbsp;
+    처음부터 재시작: <kbd>R</kbd>
+  </div>
+
+  <script>
+    var statusElement = document.getElementById('status');
+    var Module = {
+      canvas: (function() {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener("webglcontextlost", function(e) {
+          alert('WebGL 컨텍스트가 손실되었습니다. 페이지를 새로고침해 주세요.');
+          e.preventDefault();
+        }, false);
+        return canvas;
+      })(),
+      setStatus: function(text) {
+        if (!text) {
+          statusElement.style.display = 'none';
+        } else {
+          statusElement.innerText = text;
+        }
+      }
+    };
+    window.addEventListener('keydown', function(e) {
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.code) > -1) {
+        e.preventDefault();
+      }
+    }, false);
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>
