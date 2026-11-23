@@ -12,7 +12,7 @@
 #endif
 
 // ==========================================
-// 1. Constants & Enums
+// 1. 상수 및 열거형 정의
 // ==========================================
 const int SCREEN_WIDTH = 1280;
 const int SCREEN_HEIGHT = 720;
@@ -30,10 +30,10 @@ enum ScreenState {
 };
 
 enum GameMode {
-    MODE_JOURNEY = 0,      // 6 Thematic Worlds (Easy -> Master)
-    MODE_ENDLESS = 1,      // Infinite Procedural Track
-    MODE_ZEN = 2,          // No-Fail Practice Mode
-    MODE_PERFECTIONIST = 3 // One Mistake = Instant Shatter
+    MODE_JOURNEY = 0,      // 월드 투어 (6개 테마 월드)
+    MODE_ENDLESS = 1,      // 무한 러시 (생존 모드)
+    MODE_ZEN = 2,          // 연습 모드 (게임오버 없음)
+    MODE_PERFECTIONIST = 3 // 퍼펙트 챌린지 (원히트 도전)
 };
 
 enum Strictness {
@@ -107,17 +107,17 @@ struct WorldInfo {
     const char* songStyle;
     const char* gimmickDesc;
     float bpm;
-    int difficultyLevel; // 1 to 6
+    int difficultyLevel;
     float hue;
-    int melodyNotes[8];  // Indices into note scale
+    int melodyNotes[8];
     int bassNotes[4];
-    int instrumentType;  // 0: Music Box, 1: E-Piano, 2: Crystal Chime, 3: Harp, 4: Synth Lead, 5: Boss Organ
+    int instrumentType;
     bool cleared;
     float bestAcc;
 };
 
 // ==========================================
-// 2. Global Game State
+// 2. 전역 게임 상태
 // ==========================================
 Font gameFont = { 0 };
 ScreenState screen = SCR_MODE_SELECT;
@@ -127,75 +127,59 @@ int selectedWorld = 0;
 bool autoPlay = false;
 float audioOffsetMs = 0.0f;
 
-// Note frequency table (A3 to E5)
 const float NOTE_FREQS[18] = {
-    220.00f, // 0: A3
-    233.08f, // 1: Bb3
-    246.94f, // 2: B3
-    261.63f, // 3: C4
-    277.18f, // 4: C#4
-    293.66f, // 5: D4
-    311.13f, // 6: D#4
-    329.63f, // 7: E4
-    349.23f, // 8: F4
-    369.99f, // 9: F#4
-    392.00f, // 10: G4
-    415.30f, // 11: G#4
-    440.00f, // 12: A4
-    466.16f, // 13: Bb4
-    493.88f, // 14: B4
-    523.25f, // 15: C5
-    587.33f, // 16: D5
-    659.25f  // 17: E5
+    220.00f, 233.08f, 246.94f, 261.63f, 277.18f, 293.66f,
+    311.13f, 329.63f, 349.23f, 369.99f, 392.00f, 415.30f,
+    440.00f, 466.16f, 493.88f, 523.25f, 587.33f, 659.25f
 };
 
 WorldInfo worlds[WORLD_COUNT] = {
     {
-        "First Spark", "VERY EASY", "Music Box Ballad",
-        "Straight & 90-Deg Turns Only",
+        "첫 번째 불꽃", "매우 쉬움", "오르골 발라드",
+        "직진과 90도 회전만 등장하는 입문 코스",
         96.0f, 1, 24.0f,
-        { 3, 7, 10, 12, 10, 7, 5, 10 }, // C Major Pentatonic
+        { 3, 7, 10, 12, 10, 7, 5, 10 },
         { 3, 8, 3, 10 }, 0, false, 0.0f
     },
     {
-        "Whispering Breeze", "EASY", "Warm Electric Piano",
-        "Introduces Stairs & Swirl Reversals",
+        "산들바람 왈츠", "쉬움", "따뜻한 일렉트릭 피아노",
+        "계단형 코스와 첫 소용돌이(회전 반전)",
         108.0f, 2, 165.0f,
-        { 8, 12, 15, 17, 16, 12, 10, 15 }, // F Lydian
+        { 8, 12, 15, 17, 16, 12, 10, 15 },
         { 8, 5, 10, 3 }, 1, false, 0.0f
     },
     {
-        "Glacial Spiral", "MEDIUM", "Crystal Winter Chimes",
-        "Expanding Spiral Coil & 45-Deg Diagonals",
+        "빙하의 나선", "보통", "크리스탈 겨울 차임",
+        "달팽이 나선형 코스와 45도 대각선",
         120.0f, 3, 198.0f,
-        { 12, 15, 17, 14, 15, 12, 10, 7 }, // A Minor
+        { 12, 15, 17, 14, 15, 12, 10, 7 },
         { 0, 8, 3, 10 }, 2, false, 0.0f
     },
     {
-        "Starlight Waltz", "CHALLENGING", "Celestial Harp Arpeggio",
-        "Diamond Arena, Triangle Midspins & U-Turns",
+        "별빛 무도회", "도전", "천상의 하프 아르페지오",
+        "다이아몬드 광장, 삼각 미드스핀, 360도 유턴",
         132.0f, 4, 248.0f,
-        { 5, 8, 12, 15, 14, 10, 12, 8 }, // D Dorian
+        { 5, 8, 12, 15, 14, 10, 12, 8 },
         { 5, 10, 1, 0 }, 3, false, 0.0f
     },
     {
-        "Hexagon Citadel", "HARD", "Retro Synthwave Riff",
-        "60 & 120-Deg Honeycomb Triplet Paths",
+        "육각 성채", "어려움", "레트로 신스웨이브 리프",
+        "60도·120도 육각형 벌집 셋잇단음표 코스",
         144.0f, 5, 290.0f,
-        { 7, 8, 11, 14, 15, 14, 11, 8 }, // E Phrygian Dominant
+        { 7, 8, 11, 14, 15, 14, 11, 8 },
         { 7, 8, 5, 7 }, 4, false, 0.0f
     },
     {
-        "Eclipse Finale", "MASTER", "Grand Boss Organ",
-        "Fortress Cross Combining Every Gimmick",
+        "일식의 피날레", "마스터", "웅장한 보스 오르간",
+        "모든 기믹이 총출동하는 십자 요새 코스",
         156.0f, 6, 345.0f,
-        { 3, 6, 10, 11, 10, 6, 5, 2 }, // C Harmonic Minor
+        { 3, 6, 10, 11, 10, 6, 5, 2 },
         { 3, 11, 8, 10 }, 5, false, 0.0f
     }
 };
 
 std::vector<Tile> tiles;
-std::vector<Vector2> previewPoints; // Normalized points for Mini-Map preview
+std::vector<Vector2> previewPoints;
 std::deque<TrailPoint> fireTrail;
 std::deque<TrailPoint> iceTrail;
 std::vector<Particle> particles;
@@ -242,12 +226,50 @@ Sound sndHat;
 Sound sndSwirl;
 Sound sndFail;
 Sound sndClear;
-Sound sndMelody[6][18]; // Pre-synthesized instruments x notes
+Sound sndMelody[6][18];
 Sound sndBass[18];
 
 // ==========================================
-// 3. UI & Typography Helpers
+// 3. 한글 폰트 로더 및 UI 유틸리티
 // ==========================================
+Font LoadKoreanFont(const char* path, int fontSize) {
+    std::string allChars;
+    for (int c = 32; c <= 126; c++) allChars.push_back((char)c);
+    allChars += "•";
+
+    for (int i = 0; i < WORLD_COUNT; i++) {
+        allChars += worlds[i].name;
+        allChars += worlds[i].diffLabel;
+        allChars += worlds[i].songStyle;
+        allChars += worlds[i].gimmickDesc;
+    }
+
+    allChars +=
+        "얼음과 불의 춤 게임 모드를 선택하세요 월드 투어 개 입문부터 마스터까지 고유한 음악과 코스를 정복하세요 "
+        "무한 러시 생존 모드 끝없이 생성되는 랜덤 코스를 밟으며 최고 기록에 도전하세요 연습 게임오버 없음 "
+        "박자를 놓쳐도 실패하지 않고 끝까지 연습할 수 있습니다 퍼펙트 챌린지 원히트 도전 "
+        "단 한 번의 실수나 어긋남도 허용되지 않는 고수용 모드입니다 최고 기록 타일 "
+        "클릭 또는 방향키로 선택 판정 쉬움 보통 엄격 오토플레이 켜짐 꺼짐 싱크 "
+        "모드 선택 코스 모양 미리보기 월드 시작 난이도 음악 고정 코스 상태 클리어 완료 최고 정확도 "
+        "아직 클리어하지 않음 진행률 연속 메뉴 빠름 느림 완벽 너무 체크포인트 놓침 준비 "
+        "행성 파괴 퍼펙트 챌린지 완벽하지 않은 타이밍 일찍 입력했습니다 과부하 놓쳤습니다 "
+        "생존 기록 부활 처음부터 다시 도전 최종 판정 다음";
+
+    int cpCount = 0;
+    int* rawCps = LoadCodepoints(allChars.c_str(), &cpCount);
+
+    std::vector<int> uniqueCps;
+    uniqueCps.reserve(cpCount);
+    for (int i = 0; i < cpCount; i++) {
+        if (std::find(uniqueCps.begin(), uniqueCps.end(), rawCps[i]) == uniqueCps.end()) {
+            uniqueCps.push_back(rawCps[i]);
+        }
+    }
+    UnloadCodepoints(rawCps);
+
+    return LoadFontEx(path, fontSize, uniqueCps.data(), (int)uniqueCps.size());
+}
+
 void DrawTextUI(const char* text, float x, float y, float size, Color color, bool shadow = true) {
     if (shadow) {
         DrawTextEx(gameFont, text, { x + 2.0f, y + 2.0f }, size, 1.0f, Fade(BLACK, (color.a / 255.0f) * 0.65f));
@@ -260,7 +282,6 @@ void DrawTextCentered(const char* text, float centerX, float y, float size, Colo
     DrawTextUI(text, centerX - dim.x * 0.5f, y, size, color, shadow);
 }
 
-// Version-safe outlined rounded card helper
 void DrawCardBox(Rectangle rec, float roundness, Color fillCol, Color borderCol, float borderThick = 2.0f) {
     DrawRectangleRounded({ rec.x + 4, rec.y + 6, rec.width, rec.height }, roundness, 10, Fade(BLACK, 0.42f));
     DrawRectangleRounded(rec, roundness, 10, borderCol);
@@ -290,7 +311,7 @@ void GetJudgmentWindows(float& purePerfect, float& perfect, float& maxWindow) {
 }
 
 // ==========================================
-// 4. Multi-Instrument Audio Synthesizer
+// 4. 다중 악기 사운드 합성기
 // ==========================================
 Sound SynthSFX(int type, float freq, float duration, float volume) {
     int sampleRate = 44100;
@@ -301,19 +322,19 @@ Sound SynthSFX(int type, float freq, float duration, float volume) {
         float t = (float)i / sampleRate;
         float sample = 0.0f;
 
-        if (type == 0) { // Crisp Hit
+        if (type == 0) {
             float env = expf(-t * 36.0f);
             sample = (sinf(2.0f * PI * freq * t) * 0.68f + sinf(2.0f * PI * (freq * 1.5f) * t) * 0.32f) * env;
-        } else if (type == 1) { // Kick
+        } else if (type == 1) {
             float env = expf(-t * 17.0f);
             float f = freq * expf(-t * 22.0f) + 44.0f;
             sample = sinf(2.0f * PI * f * t) * env;
-        } else if (type == 2) { // Snare / Hat
+        } else if (type == 2) {
             float env = expf(-t * (freq > 1000.0f ? 58.0f : 23.0f));
             float noise = ((float)GetRandomValue(-1000, 1000) / 1000.0f);
             float tone = (freq < 1000.0f) ? sinf(2.0f * PI * 185.0f * t) * 0.38f : 0.0f;
             sample = (noise * 0.72f + tone) * env;
-        } else if (type == 3) { // Swirl / Fail Sweep
+        } else if (type == 3) {
             float env = expf(-t * 10.5f);
             float f = freq + (duration > 0.25f ? -freq * 0.65f * (t / duration) : freq * 0.55f * (t / duration));
             sample = (sinf(2.0f * PI * f * t) + 0.28f * sinf(4.0f * PI * f * t)) * env;
@@ -338,30 +359,30 @@ Sound SynthInstrumentNote(int inst, float freq, float duration, float volume) {
         float t = (float)i / sampleRate;
         float sample = 0.0f;
 
-        if (inst == 0) { // Music Box (pure bell harmonics)
+        if (inst == 0) {
             float env = expf(-t * 8.0f);
             sample = (sinf(2.0f * PI * freq * t) * 0.65f + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.35f) * env;
-        } else if (inst == 1) { // Electric Piano (warm tine + tremolo)
+        } else if (inst == 1) {
             float env = fminf(1.0f, t * 40.0f) * expf(-t * 5.0f);
             float trem = 1.0f + 0.15f * sinf(2.0f * PI * 5.5f * t);
             sample = (sinf(2.0f * PI * freq * t) * 0.7f + sinf(2.0f * PI * (freq * 3.0f) * t) * 0.15f * expf(-t * 14.0f)) * env * trem;
-        } else if (inst == 2) { // Crystal Chimes (shimmering overtones)
+        } else if (inst == 2) {
             float env = expf(-t * 7.5f);
             sample = (sinf(2.0f * PI * freq * t) * 0.5f + sinf(2.0f * PI * (freq * 2.5f) * t) * 0.3f + sinf(2.0f * PI * (freq * 4.0f) * t) * 0.2f) * env;
-        } else if (inst == 3) { // Harp Pluck
+        } else if (inst == 3) {
             float env = fminf(1.0f, t * 60.0f) * expf(-t * 6.5f);
             sample = (sinf(2.0f * PI * freq * t) * 0.6f + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.3f + sinf(2.0f * PI * (freq * 3.0f) * t) * 0.1f) * env;
-        } else if (inst == 4) { // Retro Synth Lead (soft saw/square blend)
+        } else if (inst == 4) {
             float env = fminf(1.0f, t * 50.0f) * expf(-t * 6.0f);
             float s1 = sinf(2.0f * PI * freq * t);
             float s2 = (sinf(2.0f * PI * freq * t) > 0.0f ? 0.35f : -0.35f);
             sample = (s1 * 0.65f + s2 * 0.35f) * env;
-        } else if (inst == 5) { // Boss Organ (rich octave stack)
+        } else if (inst == 5) {
             float env = fminf(1.0f, t * 35.0f) * expf(-t * 4.5f);
             sample = (sinf(2.0f * PI * (freq * 0.5f) * t) * 0.4f
                     + sinf(2.0f * PI * freq * t) * 0.4f
                     + sinf(2.0f * PI * (freq * 2.0f) * t) * 0.2f) * env;
-        } else { // Deep Sub Bass
+        } else {
             float env = fminf(1.0f, t * 30.0f) * expf(-t * 4.5f);
             sample = (sinf(2.0f * PI * (freq * 0.5f) * t) * 0.8f + sinf(2.0f * PI * freq * t) * 0.2f) * env;
         }
@@ -399,76 +420,70 @@ void EnsureAudioInitialized() {
 }
 
 // ==========================================
-// 5. Thematic Geometric Course Builders
+// 5. 6개 테마 월드 코스 생성기
 // ==========================================
 std::vector<MapStep> GetWorldSteps(int worldIdx) {
     if (worldIdx == 0) {
-        // World 1: First Spark (96 BPM) - Gentle Straight Runway + Wide L-Turns (NO swirls, NO midspins)
         return {
             {0}, {0}, {0}, {0}, {0}, {0},
             {-90}, {0}, {0}, {0},
-            {0, false, false, true}, // Checkpoint
+            {0, false, false, true},
             {0}, {90}, {0}, {0}, {0},
             {-90}, {0}, {0}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 1) {
-        // World 2: Whispering Breeze (108 BPM) - Ascending Sky Staircase + Gentle Swirls
         return {
             {0}, {0}, {0},
             {-90}, {0}, {-90}, {0}, {-90}, {0},
-            {0, true}, {0}, {0}, {0}, // First Swirl!
+            {0, true}, {0}, {0}, {0},
             {90, false, false, true}, {0}, {90}, {0}, {90}, {0},
             {0, true}, {0}, {-90}, {0}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 2) {
-        // World 3: Glacial Spiral (120 BPM) - Spiral Coil + 45-Deg Diagonals
         return {
             {0}, {0}, {0}, {0},
             {90}, {90}, {90},
             {180}, {180},
             {-90}, {-90},
-            {0, false, false, true}, // Checkpoint
+            {0, false, false, true},
             {0, true}, {0},
             {-45}, {45}, {-45}, {45}, {-45}, {45},
             {0, true}, {0}, {-90}, {0}, {90}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 3) {
-        // World 4: Starlight Waltz (132 BPM) - Diamond Arena + Triangle Midspins + 360 U-Turn
         return {
             {0}, {-45}, {-45}, {45}, {45},
-            {-90, false, true}, {0}, {90, false, true}, {0}, // Midspin peaks
-            {0, true}, {0}, {180}, {0}, // 360 U-Turn
-            {0, false, false, true}, // Checkpoint
+            {-90, false, true}, {0}, {90, false, true}, {0},
+            {0, true}, {0}, {180}, {0},
+            {0, false, false, true},
             {45}, {45}, {-45}, {-45},
             {-90, false, true}, {0}, {-90, false, true}, {0},
             {0, true}, {0}, {-90}, {0}, {90}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 4) {
-        // World 5: Hexagon Citadel (144 BPM) - 60 & 120-Deg Honeycomb Loops
         return {
             {0}, {-60}, {0}, {60}, {120}, {60}, {0},
             {-60, false, true}, {0}, {60, false, true}, {0},
             {0, true}, {0}, {-60}, {-120}, {-60}, {0},
-            {0, false, false, true}, // Checkpoint
+            {0, false, false, true},
             {60}, {0}, {-60}, {0}, {60}, {0}, {-60}, {0},
             {180, true}, {0}, {-60, false, true}, {0},
             {0, true}, {0}, {0}, {0}
         };
     }
     else {
-        // World 6: Eclipse Finale (156 BPM) - Grand Fortress Cross
         return {
             {0}, {-90}, {0}, {90}, {0},
             {0, true}, {-90, true}, {0, true}, {90, true},
             {-90, false, true}, {0}, {-90, false, true}, {0},
-            {0, false, false, true}, // Checkpoint 1
+            {0, false, false, true},
             {-45}, {45}, {-45}, {45}, {180, true}, {0},
             {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
-            {0, false, false, true}, // Checkpoint 2
+            {0, false, false, true},
             {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
             {-90, false, true}, {0}, {90, false, true}, {0},
             {0, true}, {0}, {0}, {0}
@@ -502,7 +517,6 @@ void BuildTilesFromSteps(const std::vector<MapStep>& steps) {
     }
 }
 
-// Compute normalized mini-map points for World Select showcase
 void UpdateWorldPreview(int worldIdx) {
     std::vector<MapStep> steps = GetWorldSteps(worldIdx);
     previewPoints.clear();
@@ -532,7 +546,6 @@ void UpdateWorldPreview(int worldIdx) {
     }
 }
 
-// Append procedural tiles for Endless Rush Mode
 void AppendEndlessTiles(int count) {
     const float angles[7] = { 0.0f, 0.0f, -90.0f, 90.0f, -45.0f, 45.0f, 180.0f };
     for (int i = 0; i < count; i++) {
@@ -553,7 +566,7 @@ void AppendEndlessTiles(int count) {
 }
 
 // ==========================================
-// 6. Visual Effects & Orbit Logic
+// 6. 이펙트 및 공전 궤도 제어
 // ==========================================
 void InitAmbientMotes() {
     motes.clear();
@@ -711,7 +724,7 @@ void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
 
     if (!wasMissInZen && tiles[currentTile].checkpoint && currentMode == MODE_JOURNEY) {
         lastCheckpoint = currentTile;
-        AddPopup("CHECKPOINT!", hitTilePos, GREEN);
+        AddPopup("체크포인트!", hitTilePos, GREEN);
         SpawnShockwave(hitTilePos, GREEN, 110.0f);
     }
 
@@ -747,7 +760,7 @@ void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
 }
 
 // ==========================================
-// 7. Main Update & Render Loop
+// 7. 메인 업데이트 및 렌더링 루프
 // ==========================================
 void UpdateAndDrawFrame() {
     float dt = GetFrameTime();
@@ -765,7 +778,7 @@ void UpdateAndDrawFrame() {
     bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
     // ------------------------------------------
-    // SCREEN 1: MODE SELECT
+    // 화면 1: 모드 선택
     // ------------------------------------------
     if (screen == SCR_MODE_SELECT) {
         float modeHues[4] = { 24.0f, 185.0f, 145.0f, 345.0f };
@@ -777,7 +790,6 @@ void UpdateAndDrawFrame() {
             currentMode = (GameMode)(((int)currentMode + 2) % 4);
         }
 
-        // Mode cards click detection
         for (int i = 0; i < 4; i++) {
             int col = i % 2;
             int row = i / 2;
@@ -793,20 +805,16 @@ void UpdateAndDrawFrame() {
             }
         }
 
-        // Bottom clickable settings pills
         if (clicked) {
-            // Timing buttons
             for (int s = 0; s < 3; s++) {
-                Rectangle b = { 255.0f + s * 98.0f, 548.0f, 90.0f, 36.0f };
+                Rectangle b = { 210.0f + s * 88.0f, 548.0f, 80.0f, 36.0f };
                 if (CheckCollisionPointRec(mp, b)) strictness = (Strictness)s;
             }
-            // Autoplay button
-            Rectangle autoBtn = { 665.0f, 548.0f, 100.0f, 36.0f };
+            Rectangle autoBtn = { 600.0f, 548.0f, 90.0f, 36.0f };
             if (CheckCollisionPointRec(mp, autoBtn)) autoPlay = !autoPlay;
 
-            // Offset - / + buttons
-            Rectangle offMinus = { 895.0f, 548.0f, 40.0f, 36.0f };
-            Rectangle offPlus  = { 1035.0f, 548.0f, 40.0f, 36.0f };
+            Rectangle offMinus = { 780.0f, 548.0f, 40.0f, 36.0f };
+            Rectangle offPlus  = { 920.0f, 548.0f, 40.0f, 36.0f };
             if (CheckCollisionPointRec(mp, offMinus)) audioOffsetMs = fmaxf(-150.0f, audioOffsetMs - 5.0f);
             if (CheckCollisionPointRec(mp, offPlus))  audioOffsetMs = fminf(150.0f, audioOffsetMs + 5.0f);
         }
@@ -821,7 +829,7 @@ void UpdateAndDrawFrame() {
         }
     }
     // ------------------------------------------
-    // SCREEN 2: WORLD / COURSE SHOWCASE SELECT
+    // 화면 2: 월드 / 코스 선택
     // ------------------------------------------
     else if (screen == SCR_WORLD_SELECT) {
         bgHue = Lerp(bgHue, worlds[selectedWorld].hue, 1.0f - expf(-6.0f * dt));
@@ -840,10 +848,10 @@ void UpdateAndDrawFrame() {
         }
 
         if (clicked) {
-            Rectangle backBtn  = { 40.0f, 28.0f, 175.0f, 42.0f };
+            Rectangle backBtn  = { 40.0f, 28.0f, 195.0f, 42.0f };
             Rectangle prevBtn  = { 65.0f, 315.0f, 68.0f, 90.0f };
             Rectangle nextBtn  = { 1147.0f, 315.0f, 68.0f, 90.0f };
-            Rectangle playBtn  = { 640.0f, 455.0f, 420.0f, 64.0f };
+            Rectangle playBtn  = { 635.0f, 445.0f, 430.0f, 64.0f };
 
             if (CheckCollisionPointRec(mp, backBtn)) screen = SCR_MODE_SELECT;
             else if (CheckCollisionPointRec(mp, prevBtn)) {
@@ -858,9 +866,8 @@ void UpdateAndDrawFrame() {
                 StartGame(0);
             }
 
-            // Bottom 1..6 world quick-jump pills
             for (int w = 0; w < WORLD_COUNT; w++) {
-                Rectangle pill = { 340.0f + w * 102.0f, 595.0f, 88.0f, 46.0f };
+                Rectangle pill = { 335.0f + w * 102.0f, 595.0f, 88.0f, 46.0f };
                 if (CheckCollisionPointRec(mp, pill)) {
                     selectedWorld = w;
                     UpdateWorldPreview(selectedWorld);
@@ -869,15 +876,14 @@ void UpdateAndDrawFrame() {
         }
     }
     // ------------------------------------------
-    // SCREEN 3: COUNTDOWN & GAMEPLAY
+    // 화면 3: 카운트다운 및 플레이
     // ------------------------------------------
     else if (screen == SCR_COUNTDOWN || screen == SCR_PLAYING) {
         if (IsKeyPressed(KEY_TAB)) autoPlay = !autoPlay;
         if (IsKeyPressed(KEY_ESCAPE)) screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
         if (IsKeyPressed(KEY_R)) StartGame(0);
 
-        // Top-right clickable Menu button during gameplay
-        if (clicked && CheckCollisionPointRec(mp, { 1135.0f, 18.0f, 115.0f, 38.0f })) {
+        if (clicked && CheckCollisionPointRec(mp, { 1130.0f, 18.0f, 120.0f, 38.0f })) {
             screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
         }
 
@@ -907,7 +913,6 @@ void UpdateAndDrawFrame() {
             }
         }
         else if (screen == SCR_PLAYING) {
-            // Distinct Per-World Musical Sequencer (8th-note grid)
             beatTimer += dt;
             if (beatTimer >= beatDuration * 0.5f) {
                 beatTimer -= beatDuration * 0.5f;
@@ -918,7 +923,6 @@ void UpdateAndDrawFrame() {
                 int step8 = totalBeatCount % 8;
                 int beat4 = (totalBeatCount / 2) % 4;
 
-                // Play distinct melody note on every 8th note
                 int noteIdx = worlds[wIdx].melodyNotes[step8];
                 PlaySound(sndMelody[inst][noteIdx]);
 
@@ -950,25 +954,24 @@ void UpdateAndDrawFrame() {
                 if (fabsf(errorSec) <= maxWin) {
                     float errMs = errorSec * 1000.0f;
                     Color jCol = GREEN;
-                    std::string jText = "PERFECT!";
+                    std::string jText = "완벽!";
                     float accVal = 1.0f;
                     bool isGoodHit = true;
 
                     if (autoPlay || fabsf(errorSec) <= pureWin) {
-                        jText = "PURE PERFECT!"; jCol = { 70, 255, 195, 255 }; accVal = 1.0f; perfectCount++;
+                        jText = "완벽!"; jCol = { 70, 255, 195, 255 }; accVal = 1.0f; perfectCount++;
                     } else if (errorSec < 0) {
-                        if (fabsf(errorSec) <= perfWin) { jText = "EARLY"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
-                        else { jText = "TOO EARLY"; jCol = GOLD; accVal = 0.50f; isGoodHit = false; }
+                        if (fabsf(errorSec) <= perfWin) { jText = "빠름"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
+                        else { jText = "너무 빠름"; jCol = GOLD; accVal = 0.50f; isGoodHit = false; }
                     } else {
-                        if (fabsf(errorSec) <= perfWin) { jText = "LATE"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
-                        else { jText = "TOO LATE"; jCol = GOLD; accVal = 0.50f; isGoodHit = false; }
+                        if (fabsf(errorSec) <= perfWin) { jText = "느림"; jCol = { 120, 245, 95, 255 }; accVal = 0.85f; }
+                        else { jText = "너무 느림"; jCol = GOLD; accVal = 0.50f; isGoodHit = false; }
                     }
 
-                    // Perfectionist Mode fails on ANY non-green hit
                     if (currentMode == MODE_PERFECTIONIST && !isGoodHit) {
                         PlaySound(sndFail);
                         screenShake = 16.0f;
-                        failReason = "PERFECTIONIST MODE: IMPERFECT TIMING!";
+                        failReason = "퍼펙트 챌린지: 완벽하지 않은 타이밍!";
                         SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
                         screen = SCR_GAMEOVER;
                     } else {
@@ -988,15 +991,14 @@ void UpdateAndDrawFrame() {
                         AdvanceTileAfterHit(hitTilePos, false);
                     }
                 } else {
-                    // Too early input
                     if (currentMode == MODE_ZEN) {
                         screenShake = 8.0f;
                         streakCount = 0;
-                        AddPopup("TOO EARLY!", pivotPos, ORANGE);
+                        AddPopup("너무 빠름!", pivotPos, ORANGE);
                     } else {
                         PlaySound(sndFail);
                         screenShake = 16.0f;
-                        failReason = "TOO EARLY! (OVERLOAD)";
+                        failReason = "너무 일찍 입력했습니다! (과부하)";
                         SpawnHitParticles(pivotPos, RED, 32);
                         SpawnShockwave(pivotPos, RED, 120.0f);
                         screen = SCR_GAMEOVER;
@@ -1004,17 +1006,16 @@ void UpdateAndDrawFrame() {
                 }
             }
             else if (errorSec > maxWin) {
-                // Missed beat
                 if (currentMode == MODE_ZEN) {
                     streakCount = 0;
                     hitCount++;
                     Vector2 hitTilePos = tiles[currentTile + 1].pos;
-                    AddPopup("MISSED (ZEN)", hitTilePos, RED);
+                    AddPopup("놓침 (연습)", hitTilePos, RED);
                     AdvanceTileAfterHit(hitTilePos, true);
                 } else {
                     PlaySound(sndFail);
                     screenShake = 16.0f;
-                    failReason = "MISSED THE BEAT!";
+                    failReason = "박자를 놓쳤습니다!";
                     SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
                     SpawnShockwave(tiles[currentTile + 1].pos, RED, 120.0f);
                     screen = SCR_GAMEOVER;
@@ -1023,7 +1024,7 @@ void UpdateAndDrawFrame() {
         }
     }
     // ------------------------------------------
-    // SCREEN 4 & 5: GAMEOVER / CLEAR
+    // 화면 4 & 5: 게임오버 / 클리어
     // ------------------------------------------
     else if (screen == SCR_GAMEOVER) {
         if (IsKeyPressed(KEY_ESCAPE)) screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
@@ -1039,7 +1040,6 @@ void UpdateAndDrawFrame() {
         }
     }
 
-    // Camera & Particle Updates
     if (!tiles.empty() && (screen == SCR_COUNTDOWN || screen == SCR_PLAYING || screen == SCR_GAMEOVER || screen == SCR_CLEAR)) {
         camera.target = Vector2Lerp(camera.target, pivotPos, 1.0f - expf(-9.0f * dt));
         cameraBeatPulse = Lerp(cameraBeatPulse, 0.0f, 1.0f - expf(-12.0f * dt));
@@ -1094,7 +1094,7 @@ void UpdateAndDrawFrame() {
     }
 
     // ==========================================
-    // 8. Rendering
+    // 8. 화면 렌더링
     // ==========================================
     BeginDrawing();
     Color bgCol = ColorFromHSV(bgHue, 0.45f, 0.10f + cameraBeatPulse * 0.55f);
@@ -1108,19 +1108,19 @@ void UpdateAndDrawFrame() {
     DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 460.0f + cameraBeatPulse * 620.0f, Fade(WHITE, 0.03f));
 
     // ------------------------------------------
-    // RENDER 1: CLEAN 2x2 MODE SELECT SCREEN
+    // 렌더링 1: 모드 선택 화면
     // ------------------------------------------
     if (screen == SCR_MODE_SELECT) {
-        DrawTextCentered("A DANCE OF FIRE AND ICE", SCREEN_WIDTH / 2.0f, 48.0f, 50.0f, WHITE);
-        DrawTextCentered("SELECT GAME MODE", SCREEN_WIDTH / 2.0f, 108.0f, 20.0f, SKYBLUE);
+        DrawTextCentered("얼음과 불의 춤", SCREEN_WIDTH / 2.0f, 46.0f, 52.0f, WHITE);
+        DrawTextCentered("게임 모드를 선택하세요", SCREEN_WIDTH / 2.0f, 110.0f, 20.0f, SKYBLUE);
 
-        const char* modeTitles[4] = { "WORLD TOUR", "ENDLESS RUSH", "ZEN PRACTICE", "PERFECTIONIST" };
-        const char* modeBadges[4] = { "6 WORLDS", "SURVIVAL", "NO GAME OVER", "1-HIT CHALLENGE" };
+        const char* modeTitles[4] = { "월드 투어", "무한 러시", "연습 모드", "퍼펙트 챌린지" };
+        const char* modeBadges[4] = { "6개 월드", "생존 모드", "게임오버 없음", "원히트 도전" };
         const char* modeDescs[4]  = {
-            "Progress from Easy to Master across 6 distinct songs & courses.",
-            "Infinite procedural track! Survive as many tiles as possible.",
-            "Relax and practice any world without failing when you miss.",
-            "Every hit must be Pure Perfect or Perfect. Zero margin for error."
+            "입문부터 마스터까지 6개의 고유한 음악과 코스를 정복하세요.",
+            "끝없이 생성되는 랜덤 코스를 밟으며 최고 기록에 도전하세요.",
+            "박자를 놓쳐도 실패하지 않고 끝까지 연습할 수 있습니다.",
+            "단 한 번의 실수나 어긋남도 허용되지 않는 고수용 모드입니다."
         };
         float modeHues[4] = { 24.0f, 185.0f, 145.0f, 345.0f };
 
@@ -1136,66 +1136,64 @@ void UpdateAndDrawFrame() {
                         sel ? theme : Fade(WHITE, 0.16f),
                         sel ? 2.5f : 1.5f);
 
-            DrawTextUI(modeTitles[i], card.x + 24, card.y + 20, 28.0f, WHITE);
-            DrawRectangleRounded({ card.x + 285, card.y + 22, 148.0f, 26.0f }, 0.4f, 6, Fade(theme, 0.25f));
-            DrawTextCentered(modeBadges[i], card.x + 359, card.y + 27, 14.0f, theme);
+            DrawTextUI(modeTitles[i], card.x + 24, card.y + 18, 28.0f, WHITE);
+            DrawRectangleRounded({ card.x + 285, card.y + 20, 148.0f, 28.0f }, 0.4f, 6, Fade(theme, 0.25f));
+            DrawTextCentered(modeBadges[i], card.x + 359, card.y + 26, 15.0f, theme);
 
-            DrawTextUI(modeDescs[i], card.x + 24, card.y + 68, 16.0f, LIGHTGRAY);
+            DrawTextUI(modeDescs[i], card.x + 24, card.y + 66, 15.5f, LIGHTGRAY);
             if (i == 1 && bestEndlessScore > 0) {
-                DrawTextUI(TextFormat("BEST RECORD: %d TILES", bestEndlessScore), card.x + 24, card.y + 102, 16.0f, GOLD);
+                DrawTextUI(TextFormat("최고 기록: %d 타일", bestEndlessScore), card.x + 24, card.y + 102, 16.0f, GOLD);
             } else {
-                DrawTextUI("Click or Press [SPACE] to Enter ->", card.x + 24, card.y + 102, 15.0f, theme);
+                DrawTextUI("클릭 또는 방향키 + [SPACE]로 선택", card.x + 24, card.y + 102, 15.0f, theme);
             }
         }
 
-        // Clean Clickable Settings Bar
-        DrawCardBox({ 155.0f, 532.0f, 970.0f, 68.0f }, 0.25f, Color{ 18, 22, 34, 235 }, Fade(WHITE, 0.14f), 1.5f);
+        // 하단 설정 바
+        DrawCardBox({ 135.0f, 532.0f, 1010.0f, 68.0f }, 0.25f, Color{ 18, 22, 34, 235 }, Fade(WHITE, 0.14f), 1.5f);
 
-        DrawTextUI("TIMING:", 180.0f, 556.0f, 17.0f, LIGHTGRAY);
-        const char* sLabels[3] = { "EASY", "NORMAL", "STRICT" };
+        DrawTextUI("판정:", 160.0f, 556.0f, 17.0f, LIGHTGRAY);
+        const char* sLabels[3] = { "쉬움", "보통", "엄격" };
         for (int s = 0; s < 3; s++) {
-            Rectangle b = { 255.0f + s * 98.0f, 548.0f, 90.0f, 36.0f };
+            Rectangle b = { 210.0f + s * 88.0f, 548.0f, 80.0f, 36.0f };
             bool active = ((int)strictness == s);
             DrawRectangleRounded(b, 0.35f, 6, active ? SKYBLUE : Fade(WHITE, 0.08f));
             DrawTextCentered(sLabels[s], b.x + b.width * 0.5f, b.y + 9.0f, 16.0f, active ? BLACK : WHITE, false);
         }
 
-        DrawTextUI("AUTOPLAY:", 575.0f, 556.0f, 17.0f, LIGHTGRAY);
-        Rectangle autoBtn = { 665.0f, 548.0f, 100.0f, 36.0f };
+        DrawTextUI("오토플레이:", 505.0f, 556.0f, 17.0f, LIGHTGRAY);
+        Rectangle autoBtn = { 600.0f, 548.0f, 90.0f, 36.0f };
         DrawRectangleRounded(autoBtn, 0.35f, 6, autoPlay ? GOLD : Fade(WHITE, 0.08f));
-        DrawTextCentered(autoPlay ? "ON" : "OFF", autoBtn.x + 50.0f, autoBtn.y + 9.0f, 16.0f, autoPlay ? BLACK : WHITE, false);
+        DrawTextCentered(autoPlay ? "켜짐" : "꺼짐", autoBtn.x + 45.0f, autoBtn.y + 9.0f, 16.0f, autoPlay ? BLACK : WHITE, false);
 
-        DrawTextUI("SYNC:", 840.0f, 556.0f, 17.0f, LIGHTGRAY);
-        Rectangle offMinus = { 895.0f, 548.0f, 40.0f, 36.0f };
-        Rectangle offPlus  = { 1035.0f, 548.0f, 40.0f, 36.0f };
+        DrawTextUI("싱크:", 730.0f, 556.0f, 17.0f, LIGHTGRAY);
+        Rectangle offMinus = { 780.0f, 548.0f, 40.0f, 36.0f };
+        Rectangle offPlus  = { 920.0f, 548.0f, 40.0f, 36.0f };
         DrawRectangleRounded(offMinus, 0.35f, 6, Fade(WHITE, 0.12f));
         DrawRectangleRounded(offPlus, 0.35f, 6, Fade(WHITE, 0.12f));
         DrawTextCentered("-", offMinus.x + 20.0f, offMinus.y + 7.0f, 20.0f, WHITE, false);
         DrawTextCentered("+", offPlus.x + 20.0f, offPlus.y + 7.0f, 20.0f, WHITE, false);
-        DrawTextCentered(TextFormat("%.0f ms", audioOffsetMs), 985.0f, 556.0f, 17.0f, WHITE);
+        DrawTextCentered(TextFormat("%.0f ms", audioOffsetMs), 870.0f, 556.0f, 17.0f, WHITE);
 
         EndDrawing();
         return;
     }
 
     // ------------------------------------------
-    // RENDER 2: FOCUSED WORLD SHOWCASE SELECT
+    // 렌더링 2: 월드 선택 및 코스 미리보기
     // ------------------------------------------
     if (screen == SCR_WORLD_SELECT) {
         WorldInfo& w = worlds[selectedWorld];
         Color theme = ColorFromHSV(w.hue, 0.68f, 0.95f);
 
-        // Top Bar
-        Rectangle backBtn = { 40.0f, 28.0f, 175.0f, 42.0f };
+        Rectangle backBtn = { 40.0f, 28.0f, 195.0f, 42.0f };
         DrawCardBox(backBtn, 0.3f, Color{ 24, 28, 44, 240 }, Fade(WHITE, 0.25f), 1.5f);
-        DrawTextCentered("< MODES [ESC]", backBtn.x + backBtn.width * 0.5f, backBtn.y + 11.0f, 17.0f, WHITE);
+        DrawTextCentered("< 모드 선택 [ESC]", backBtn.x + backBtn.width * 0.5f, backBtn.y + 11.0f, 17.0f, WHITE);
 
-        const char* modeBanner = (currentMode == MODE_JOURNEY) ? "MODE: WORLD TOUR" :
-                                 (currentMode == MODE_ZEN)     ? "MODE: ZEN PRACTICE (NO-FAIL)" :
-                                                                 "MODE: PERFECTIONIST CHALLENGE";
+        const char* modeBanner = (currentMode == MODE_JOURNEY) ? "모드: 월드 투어" :
+                                 (currentMode == MODE_ZEN)     ? "모드: 연습 모드 (실패 없음)" :
+                                                                 "모드: 퍼펙트 챌린지";
         DrawTextCentered(modeBanner, SCREEN_WIDTH / 2.0f, 36.0f, 22.0f, theme);
 
-        // Left / Right Carousel Arrows
         Rectangle prevBtn = { 65.0f, 315.0f, 68.0f, 90.0f };
         Rectangle nextBtn = { 1147.0f, 315.0f, 68.0f, 90.0f };
         DrawCardBox(prevBtn, 0.3f, Color{ 24, 28, 44, 240 }, theme, 2.0f);
@@ -1203,14 +1201,13 @@ void UpdateAndDrawFrame() {
         DrawTextCentered("<", prevBtn.x + 34.0f, prevBtn.y + 24.0f, 42.0f, WHITE);
         DrawTextCentered(">", nextBtn.x + 34.0f, nextBtn.y + 24.0f, 42.0f, WHITE);
 
-        // Center Showcase Card
         Rectangle showcase = { 165.0f, 115.0f, 950.0f, 435.0f };
         DrawCardBox(showcase, 0.08f, Color{ 18, 22, 35, 245 }, theme, 2.5f);
 
-        // Left Half: Course Shape Live Mini-Map Preview
+        // 왼쪽: 코스 모양 미리보기
         Rectangle mapBox = { 205.0f, 155.0f, 390.0f, 355.0f };
         DrawRectangleRounded(mapBox, 0.1f, 8, Color{ 12, 15, 24, 255 });
-        DrawTextCentered("COURSE SHAPE PREVIEW", mapBox.x + mapBox.width * 0.5f, mapBox.y + 16.0f, 15.0f, GRAY);
+        DrawTextCentered("코스 모양 미리보기", mapBox.x + mapBox.width * 0.5f, mapBox.y + 16.0f, 16.0f, GRAY);
 
         Vector2 mapCenter = { mapBox.x + mapBox.width * 0.5f, mapBox.y + mapBox.height * 0.53f };
         float mapRadius = 125.0f;
@@ -1227,40 +1224,37 @@ void UpdateAndDrawFrame() {
             DrawCircleV(endPt, 7.0f, GOLD);
         }
 
-        // Right Half: Clean World Details & Big Play Button
-        float rx = 640.0f;
-        DrawTextUI(TextFormat("WORLD %d  •  %s", selectedWorld + 1, w.diffLabel), rx, 155.0f, 20.0f, theme);
-        DrawTextUI(w.name, rx, 188.0f, 40.0f, WHITE);
+        // 오른쪽: 월드 정보 및 시작 버튼
+        float rx = 635.0f;
+        DrawTextUI(TextFormat("%d월드  •  %s", selectedWorld + 1, w.diffLabel), rx, 155.0f, 20.0f, theme);
+        DrawTextUI(w.name, rx, 188.0f, 38.0f, WHITE);
 
-        // Segmented Difficulty Bar
-        DrawTextUI("DIFFICULTY:", rx, 248.0f, 16.0f, GRAY);
+        DrawTextUI("난이도:", rx, 248.0f, 17.0f, GRAY);
         for (int d = 0; d < 6; d++) {
             Color segCol = (d < w.difficultyLevel) ? theme : Fade(WHITE, 0.12f);
-            DrawRectangleRounded({ rx + 115.0f + d * 48.0f, 246.0f, 40.0f, 18.0f }, 0.3f, 4, segCol);
+            DrawRectangleRounded({ rx + 75.0f + d * 52.0f, 246.0f, 44.0f, 18.0f }, 0.3f, 4, segCol);
         }
 
-        DrawTextUI(TextFormat("MUSIC:  %s  (%.0f BPM Steady)", w.songStyle, w.bpm), rx, 290.0f, 19.0f, LIGHTGRAY);
-        DrawTextUI(TextFormat("COURSE: %s", w.gimmickDesc), rx, 325.0f, 18.0f, LIGHTGRAY);
+        DrawTextUI(TextFormat("음악: %s (%.0f BPM 고정)", w.songStyle, w.bpm), rx, 290.0f, 18.0f, LIGHTGRAY);
+        DrawTextUI(TextFormat("코스: %s", w.gimmickDesc), rx, 325.0f, 17.5f, LIGHTGRAY);
 
         if (w.cleared) {
-            DrawTextUI(TextFormat("STATUS: CLEARED!  (Best Accuracy: %.1f%%)", w.bestAcc), rx, 368.0f, 18.0f, GREEN);
+            DrawTextUI(TextFormat("상태: 클리어 완료!  (최고 정확도: %.1f%%)", w.bestAcc), rx, 368.0f, 17.5f, GREEN);
         } else {
-            DrawTextUI("STATUS: NOT CLEARED YET", rx, 368.0f, 18.0f, GRAY);
+            DrawTextUI("상태: 아직 클리어하지 않음", rx, 368.0f, 17.5f, GRAY);
         }
 
-        // Big Play Button
-        Rectangle playBtn = { rx, 445.0f, 420.0f, 64.0f };
+        Rectangle playBtn = { rx, 445.0f, 430.0f, 64.0f };
         bool hoverPlay = CheckCollisionPointRec(mp, playBtn);
         DrawRectangleRounded(playBtn, 0.25f, 8, hoverPlay ? WHITE : theme);
-        DrawTextCentered("START WORLD  [SPACE]", playBtn.x + playBtn.width * 0.5f, playBtn.y + 18.0f, 24.0f, BLACK, false);
+        DrawTextCentered("월드 시작  [SPACE]", playBtn.x + playBtn.width * 0.5f, playBtn.y + 18.0f, 24.0f, BLACK, false);
 
-        // Bottom Quick-Jump World Pills (1 to 6)
         for (int i = 0; i < WORLD_COUNT; i++) {
-            Rectangle pill = { 340.0f + i * 102.0f, 595.0f, 88.0f, 46.0f };
+            Rectangle pill = { 335.0f + i * 102.0f, 595.0f, 88.0f, 46.0f };
             bool isSel = (i == selectedWorld);
             Color pCol = ColorFromHSV(worlds[i].hue, 0.65f, 0.95f);
             DrawCardBox(pill, 0.3f, isSel ? Fade(pCol, 0.32f) : Color{ 20, 24, 38, 230 }, isSel ? pCol : Fade(WHITE, 0.16f), 2.0f);
-            DrawTextCentered(TextFormat("W-%d", i + 1), pill.x + 44.0f, pill.y + 13.0f, 18.0f, isSel ? WHITE : LIGHTGRAY);
+            DrawTextCentered(TextFormat("%d월드", i + 1), pill.x + 44.0f, pill.y + 13.0f, 18.0f, isSel ? WHITE : LIGHTGRAY);
         }
 
         EndDrawing();
@@ -1268,7 +1262,7 @@ void UpdateAndDrawFrame() {
     }
 
     // ------------------------------------------
-    // RENDER 3: WORLD CAMERA GAMEPLAY
+    // 렌더링 3: 인게임 월드 렌더링
     // ------------------------------------------
     BeginMode2D(camera);
     if (!tiles.empty()) {
@@ -1286,7 +1280,6 @@ void UpdateAndDrawFrame() {
             }
         }
 
-        // Orbit guide & Remaining angle arc
         DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.16f));
         if (screen == SCR_PLAYING) {
             float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
@@ -1355,37 +1348,35 @@ void UpdateAndDrawFrame() {
         DrawCircleV(icePos, PLANET_RADIUS * 0.48f, { 215, 248, 255, 255 });
 
         for (const auto& p : popups) {
-            DrawTextCentered(p.text.c_str(), p.pos.x, p.pos.y, 19.0f, Fade(p.color, Clamp(p.timer * 1.4f, 0.0f, 1.0f)));
+            DrawTextCentered(p.text.c_str(), p.pos.x, p.pos.y, 20.0f, Fade(p.color, Clamp(p.timer * 1.4f, 0.0f, 1.0f)));
         }
     }
     EndMode2D();
 
-    // --- CLEAN HUD ---
+    // --- 상단 HUD ---
     float accPct = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
 
     if (currentMode == MODE_ENDLESS) {
-        DrawTextUI(TextFormat("ENDLESS RUSH  •  TILES: %d  (BEST: %d)", endlessTilesCleared, bestEndlessScore), 28.0f, 20.0f, 24.0f, WHITE);
-        DrawTextUI(TextFormat("ACCURACY: %.1f%%   |   STREAK: %d   |   BPM: %.0f", accPct, streakCount, currentBpm), 28.0f, 50.0f, 18.0f, SKYBLUE);
+        DrawTextUI(TextFormat("무한 러시  •  타일: %d  (최고: %d)", endlessTilesCleared, bestEndlessScore), 28.0f, 20.0f, 24.0f, WHITE);
+        DrawTextUI(TextFormat("정확도: %.1f%%   |   연속: %d   |   BPM: %.0f", accPct, streakCount, currentBpm), 28.0f, 50.0f, 18.0f, SKYBLUE);
     } else {
         float ratio = (float)currentTile / (float)(tiles.size() - 1);
-        DrawTextUI(TextFormat("WORLD %d: %s", selectedWorld + 1, worlds[selectedWorld].name), 28.0f, 18.0f, 24.0f, WHITE);
+        DrawTextUI(TextFormat("%d월드: %s", selectedWorld + 1, worlds[selectedWorld].name), 28.0f, 18.0f, 24.0f, WHITE);
 
-        // Visual Progress Bar
         DrawRectangleRounded({ 28.0f, 52.0f, 260.0f, 12.0f }, 0.5f, 4, Fade(WHITE, 0.15f));
         DrawRectangleRounded({ 28.0f, 52.0f, 260.0f * ratio, 12.0f }, 0.5f, 4, ColorFromHSV(bgHue, 0.65f, 0.95f));
-        DrawTextUI(TextFormat("%d%%   •   ACC: %.1f%%", (int)(ratio * 100.0f), accPct), 300.0f, 48.0f, 18.0f, LIGHTGRAY);
+        DrawTextUI(TextFormat("%d%%   •   정확도: %.1f%%", (int)(ratio * 100.0f), accPct), 300.0f, 48.0f, 18.0f, LIGHTGRAY);
     }
 
-    // Top-Right Menu Button & Autoplay indicator
-    Rectangle menuBtn = { 1135.0f, 18.0f, 115.0f, 38.0f };
+    Rectangle menuBtn = { 1130.0f, 18.0f, 120.0f, 38.0f };
     DrawCardBox(menuBtn, 0.3f, Color{ 20, 24, 38, 220 }, Fade(WHITE, 0.25f), 1.5f);
-    DrawTextCentered("MENU [ESC]", menuBtn.x + 57.5f, menuBtn.y + 10.0f, 15.0f, WHITE);
+    DrawTextCentered("메뉴 [ESC]", menuBtn.x + 60.0f, menuBtn.y + 10.0f, 16.0f, WHITE);
 
     if (autoPlay) {
-        DrawTextUI("[AUTOPLAY]", 1005.0f, 26.0f, 18.0f, GOLD);
+        DrawTextUI("[오토플레이]", 990.0f, 26.0f, 18.0f, GOLD);
     }
 
-    // Bottom Timing Meter with Clear Labels
+    // 하단 판정 오차 바
     int barW = 380, barH = 10;
     int barX = SCREEN_WIDTH / 2 - barW / 2;
     int barY = SCREEN_HEIGHT - 44;
@@ -1395,8 +1386,8 @@ void UpdateAndDrawFrame() {
     DrawRectangle(barX + 140, barY, barW - 280, barH, Fade(SKYBLUE, 0.85f));
     DrawRectangle(SCREEN_WIDTH / 2 - 2, barY - 6, 4, barH + 12, WHITE);
 
-    DrawTextUI("EARLY", (float)barX - 58.0f, (float)barY - 3.0f, 14.0f, GOLD);
-    DrawTextUI("LATE", (float)barX + barW + 12.0f, (float)barY - 3.0f, 14.0f, GOLD);
+    DrawTextUI("빠름", (float)barX - 48.0f, (float)barY - 3.0f, 15.0f, GOLD);
+    DrawTextUI("느림", (float)barX + barW + 14.0f, (float)barY - 3.0f, 15.0f, GOLD);
 
     for (const auto& tk : hitTicks) {
         float clamped = Clamp(tk.errorMs, -160.0f, 160.0f);
@@ -1404,32 +1395,32 @@ void UpdateAndDrawFrame() {
         DrawRectangle(tx - 2, barY - 5, 4, barH + 10, Fade(tk.color, tk.alpha));
     }
 
-    // --- OVERLAYS ---
+    // --- 상태 오버레이 ---
     if (screen == SCR_COUNTDOWN) {
         const char* cdText = (countdownBeats == 3) ? "3" :
                              (countdownBeats == 2) ? "2" :
-                             (countdownBeats == 1) ? "1" : "GET READY";
+                             (countdownBeats == 1) ? "1" : "준비!";
         DrawTextCentered(cdText, SCREEN_WIDTH / 2.0f, 135.0f, 64.0f, GOLD);
     }
     else if (screen == SCR_GAMEOVER) {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.70f));
-        DrawTextCentered("SHATTERED!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, RED);
+        DrawTextCentered("행성 파괴!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, RED);
         DrawTextCentered(failReason.c_str(), SCREEN_WIDTH / 2.0f, 290.0f, 24.0f, LIGHTGRAY);
         if (currentMode == MODE_ENDLESS) {
-            DrawTextCentered(TextFormat("Survived %d Tiles  (Best: %d)", endlessTilesCleared, bestEndlessScore),
+            DrawTextCentered(TextFormat("생존 기록: %d 타일  (최고 기록: %d 타일)", endlessTilesCleared, bestEndlessScore),
                              SCREEN_WIDTH / 2.0f, 332.0f, 22.0f, SKYBLUE);
         }
         const char* retryMsg = (currentMode == MODE_JOURNEY && lastCheckpoint > 0)
-            ? "[SPACE] Checkpoint   |   [R] Full Restart   |   [ESC] Menu"
-            : "[SPACE] Try Again   |   [ESC] Menu";
+            ? "[SPACE] 체크포인트 부활   |   [R] 처음부터   |   [ESC] 메뉴"
+            : "[SPACE] 다시 도전   |   [ESC] 메뉴";
         DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 390.0f, 22.0f, WHITE);
     }
     else if (screen == SCR_CLEAR) {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.70f));
-        DrawTextCentered("WORLD CLEARED!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, GOLD);
-        DrawTextCentered(TextFormat("Final Accuracy: %.2f%%   (Pure Perfect: %d / %d)", accPct, perfectCount, hitCount),
+        DrawTextCentered("월드 클리어!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, GOLD);
+        DrawTextCentered(TextFormat("최종 정확도: %.2f%%   (완벽 판정: %d / %d)", accPct, perfectCount, hitCount),
                          SCREEN_WIDTH / 2.0f, 292.0f, 24.0f, SKYBLUE);
-        DrawTextCentered("[SPACE] Next World   |   [ESC] World Select",
+        DrawTextCentered("[SPACE] 다음 월드   |   [ESC] 월드 선택",
                          SCREEN_WIDTH / 2.0f, 365.0f, 22.0f, WHITE);
     }
 
@@ -1438,9 +1429,9 @@ void UpdateAndDrawFrame() {
 
 int main() {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "A Dance of Fire and Ice - C++");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "얼음과 불의 춤 - C++");
 
-    gameFont = LoadFontEx("font.ttf", 64, 0, 0);
+    gameFont = LoadKoreanFont("font.ttf", 48);
     if (gameFont.texture.id == 0) {
         gameFont = GetFontDefault();
     } else {
