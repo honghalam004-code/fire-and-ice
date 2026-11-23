@@ -208,6 +208,7 @@ float beatTimer = 0.0f;
 int totalBeatCount = 0;
 float cameraBeatPulse = 0.0f;
 float screenShake = 0.0f;
+float gameOverTimer = 0.0f; // 게임오버 직후 오입력 재시작 방지 타이머
 float bgHue = 24.0f;
 
 int hitCount = 0;
@@ -253,7 +254,7 @@ Font LoadKoreanFont(const char* path, int fontSize) {
         "모드 선택 코스 모양 미리보기 월드 시작 난이도 음악 고정 코스 상태 클리어 완료 최고 정확도 "
         "아직 클리어하지 않음 진행률 연속 메뉴 빠름 느림 완벽 너무 체크포인트 놓침 준비 "
         "행성 파괴 퍼펙트 챌린지 완벽하지 않은 타이밍 일찍 입력했습니다 과부하 놓쳤습니다 "
-        "생존 기록 부활 처음부터 다시 도전 최종 판정 다음";
+        "생존 기록 부활 처음부터 다시 도전 최종 판정 다음 겹침";
 
     int cpCount = 0;
     int* rawCps = LoadCodepoints(allChars.c_str(), &cpCount);
@@ -420,7 +421,7 @@ void EnsureAudioInitialized() {
 }
 
 // ==========================================
-// 5. 6개 테마 월드 코스 생성기
+// 5. 6개 테마 월드 코스 생성기 (미드스핀 박자 균일화)
 // ==========================================
 std::vector<MapStep> GetWorldSteps(int worldIdx) {
     if (worldIdx == 0) {
@@ -454,9 +455,10 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
         };
     }
     else if (worldIdx == 3) {
+        // 4월드: 미드스핀 각도를 회전 방향에 맞춰 270도(1.5박자) 왈츠 리듬으로 통일
         return {
             {0}, {-45}, {-45}, {45}, {45},
-            {-90, false, true}, {0}, {90, false, true}, {0},
+            {90, false, true}, {0}, {90, false, true}, {0},
             {0, true}, {0}, {180}, {0},
             {0, false, false, true},
             {45}, {45}, {-45}, {-45},
@@ -465,27 +467,29 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
         };
     }
     else if (worldIdx == 4) {
+        // 5월드: 육각 성채 (미드스핀이 0.33박자로 쪼개지지 않도록 방향에 맞게 배치)
         return {
             {0}, {-60}, {0}, {60}, {120}, {60}, {0},
-            {-60, false, true}, {0}, {60, false, true}, {0},
+            {60, false, true}, {0}, {60, false, true}, {0},
             {0, true}, {0}, {-60}, {-120}, {-60}, {0},
             {0, false, false, true},
             {60}, {0}, {-60}, {0}, {60}, {0}, {-60}, {0},
-            {180, true}, {0}, {-60, false, true}, {0},
+            {180, true}, {0}, {60, false, true}, {0},
             {0, true}, {0}, {0}, {0}
         };
     }
     else {
+        // 6월드: 일식의 피날레 (균일한 미드스핀 콤보)
         return {
             {0}, {-90}, {0}, {90}, {0},
             {0, true}, {-90, true}, {0, true}, {90, true},
-            {-90, false, true}, {0}, {-90, false, true}, {0},
+            {90, false, true}, {0}, {90, false, true}, {0},
             {0, false, false, true},
             {-45}, {45}, {-45}, {45}, {180, true}, {0},
             {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
             {0, false, false, true},
             {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
-            {-90, false, true}, {0}, {90, false, true}, {0},
+            {90, false, true}, {0}, {90, false, true}, {0},
             {0, true}, {0}, {0}, {0}
         };
     }
@@ -547,26 +551,23 @@ void UpdateWorldPreview(int worldIdx) {
 }
 
 void AppendEndlessTiles(int count) {
-    const float angles[7] = { 0.0f, 0.0f, -90.0f, 90.0f, -45.0f, 45.0f, 180.0f };
+    const float angles[6] = { 0.0f, 0.0f, -90.0f, 90.0f, -45.0f, 45.0f };
     for (int i = 0; i < count; i++) {
-        float deg = angles[GetRandomValue(0, 6)];
+        float deg = angles[GetRandomValue(0, 5)];
         bool swirl = (GetRandomValue(0, 7) == 0);
-        bool midspin = (!swirl && deg != 180.0f && GetRandomValue(0, 8) == 0);
         float rad = deg * DEG2RAD;
 
         Vector2 nextPos = {
             endlessBuildPivot.x + cosf(rad) * TILE_DIST,
             endlessBuildPivot.y + sinf(rad) * TILE_DIST
         };
-        tiles.push_back({ nextPos, swirl, midspin, false, false, 0.0f });
-        if (!midspin) {
-            endlessBuildPivot = nextPos;
-        }
+        tiles.push_back({ nextPos, swirl, false, false, false, 0.0f });
+        endlessBuildPivot = nextPos;
     }
 }
 
 // ==========================================
-// 6. 이펙트 및 공전 궤도 제어
+// 6. 이펙트, 겹침 시각화 헬퍼 및 공전 궤도 제어
 // ==========================================
 void InitAmbientMotes() {
     motes.clear();
@@ -651,6 +652,105 @@ void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
     traveledAngle = 0.0f;
 }
 
+void DrawDashedGlowLine(Vector2 p1, Vector2 p2, Color col) {
+    Vector2 diff = Vector2Subtract(p2, p1);
+    float len = Vector2Length(diff);
+    if (len < 1.0f) return;
+    Vector2 dir = Vector2Scale(diff, 1.0f / len);
+    for (float d = 18.0f; d < len - 18.0f; d += 18.0f) {
+        Vector2 a = Vector2Add(p1, Vector2Scale(dir, d));
+        Vector2 b = Vector2Add(p1, Vector2Scale(dir, fminf(d + 9.0f, len - 18.0f)));
+        DrawLineEx(a, b, 6.0f, col);
+    }
+}
+
+void DrawSingleTile(size_t i, float timeNow, int remainingStackCount, bool isFirstStackHolder, bool isUTurnTile) {
+    float scale = 1.0f + tiles[i].hitAnim * 0.28f;
+    bool isCurrent = ((int)i == currentTile);
+    bool isNextTarget = ((int)i == currentTile + 1);
+    bool isGoal = (currentMode != MODE_ENDLESS && i == tiles.size() - 1);
+
+    Color rimCol = isCurrent    ? WHITE :
+                   isNextTarget ? Color{ 120, 240, 255, 255 } :
+                   tiles[i].cleared ? Color{ 110, 150, 210, 255 } : Color{ 75, 92, 130, 255 };
+    if (isGoal) rimCol = GOLD;
+
+    if (remainingStackCount >= 2 && isFirstStackHolder) {
+        Vector2 stackOffset = { tiles[i].pos.x - 5.0f, tiles[i].pos.y + 7.0f };
+        if (tiles[i].midspin) {
+            DrawPoly(stackOffset, 3, 27.0f, timeNow * 70.0f, Fade(GOLD, 0.75f));
+        } else {
+            DrawCircleV(stackOffset, 25.5f, Color{ 255, 190, 60, 220 });
+            DrawCircleV(stackOffset, 20.0f, Color{ 35, 32, 48, 255 });
+        }
+    }
+
+    if (tiles[i].midspin) {
+        DrawPoly(tiles[i].pos, 3, 26.5f * scale, timeNow * 70.0f, MAGENTA);
+        DrawPoly(tiles[i].pos, 3, 16.0f * scale, timeNow * 70.0f, { 26, 30, 46, 255 });
+    } else {
+        DrawCircleV({ tiles[i].pos.x, tiles[i].pos.y + 4.0f }, 24.0f * scale, Fade(BLACK, 0.40f));
+        DrawCircleV(tiles[i].pos, 25.0f * scale, rimCol);
+        DrawCircleV(tiles[i].pos, 18.0f * scale, isNextTarget ? Color{ 30, 42, 66, 255 } : Color{ 22, 26, 40, 255 });
+    }
+
+    if (isNextTarget) {
+        float pulse = 29.0f + 3.5f * sinf(timeNow * 9.0f);
+        DrawCircleLinesV(tiles[i].pos, pulse, Fade(WHITE, 0.85f));
+        DrawCircleLinesV(tiles[i].pos, pulse + 2.0f, Fade(SKYBLUE, 0.55f));
+    }
+
+    if (isGoal) {
+        DrawRing(tiles[i].pos, 11.0f, 15.0f, timeNow * 140.0f, timeNow * 140.0f + 240.0f, 24, GOLD);
+        DrawCircleV(tiles[i].pos, 7.0f + 2.0f * sinf(timeNow * 6.0f), WHITE);
+    }
+
+    if (tiles[i].swirl) {
+        float rot = timeNow * 200.0f;
+        DrawRing(tiles[i].pos, 9.0f, 13.5f, rot, rot + 140.0f, 16, { 240, 95, 255, 255 });
+        DrawRing(tiles[i].pos, 9.0f, 13.5f, rot + 180.0f, rot + 320.0f, 16, { 240, 95, 255, 255 });
+    }
+
+    if (isUTurnTile && !tiles[i].cleared) {
+        float rot = timeNow * 90.0f;
+        DrawRing(tiles[i].pos, 12.0f, 15.5f, rot, rot + 220.0f, 18, ORANGE);
+    }
+
+    if (tiles[i].checkpoint && currentMode == MODE_JOURNEY) {
+        DrawCircleLinesV(tiles[i].pos, 29.5f, GREEN);
+        DrawCircleLinesV(tiles[i].pos, 32.5f, Fade(GREEN, 0.45f));
+    }
+
+    if (remainingStackCount >= 2 && isFirstStackHolder) {
+        Rectangle badge = { tiles[i].pos.x + 12.0f, tiles[i].pos.y - 34.0f, 34.0f, 20.0f };
+        DrawRectangleRounded(badge, 0.45f, 6, GOLD);
+        DrawRectangleRoundedLinesEx(badge, 0.45f, 6, 1.5f, BLACK);
+        DrawTextCentered(TextFormat("x%d", remainingStackCount), badge.x + 17.0f, badge.y + 2.0f, 14.0f, BLACK, false);
+    }
+}
+
+void DrawPathDirectionArrow(Vector2 p1, Vector2 p2, float tPos, Color col, float size) {
+    Vector2 dir = Vector2Subtract(p2, p1);
+    float len = Vector2Length(dir);
+    if (len < 1.0f) return;
+    dir = Vector2Scale(dir, 1.0f / len);
+    Vector2 perp = { -dir.y, dir.x };
+    Vector2 tip = Vector2Add(Vector2Lerp(p1, p2, tPos), Vector2Scale(dir, size * 0.6f));
+    Vector2 left  = Vector2Add(Vector2Subtract(tip, Vector2Scale(dir, size * 1.3f)), Vector2Scale(perp, size * 0.85f));
+    Vector2 right = Vector2Subtract(Vector2Subtract(tip, Vector2Scale(dir, size * 1.3f)), Vector2Scale(perp, size * 0.85f));
+    DrawTriangle(tip, right, left, col);
+}
+
+void TriggerGameOver(const std::string& reason, Vector2 effectPos) {
+    PlaySound(sndFail);
+    screenShake = 16.0f;
+    gameOverTimer = 0.55f; // 0.55초 동안 실수로 즉시 재시작되는 것을 방지
+    failReason = reason;
+    SpawnHitParticles(effectPos, RED, 32);
+    SpawnShockwave(effectPos, RED, 120.0f);
+    screen = SCR_GAMEOVER;
+}
+
 void StartGame(int startFromTile = 0) {
     EnsureAudioInitialized();
 
@@ -686,6 +786,7 @@ void StartGame(int startFromTile = 0) {
     streakCount = 0;
     accuracySum = 0.0f;
     failReason = "";
+    gameOverTimer = 0.0f;
 
     Vector2 prevPiv = { 0, 0 };
     for (int i = 0; i <= startFromTile; i++) {
@@ -777,9 +878,6 @@ void UpdateAndDrawFrame() {
     Vector2 mp = GetMousePosition();
     bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
-    // ------------------------------------------
-    // 화면 1: 모드 선택
-    // ------------------------------------------
     if (screen == SCR_MODE_SELECT) {
         float modeHues[4] = { 24.0f, 185.0f, 145.0f, 345.0f };
         bgHue = Lerp(bgHue, modeHues[(int)currentMode], 1.0f - expf(-5.0f * dt));
@@ -828,9 +926,6 @@ void UpdateAndDrawFrame() {
             }
         }
     }
-    // ------------------------------------------
-    // 화면 2: 월드 / 코스 선택
-    // ------------------------------------------
     else if (screen == SCR_WORLD_SELECT) {
         bgHue = Lerp(bgHue, worlds[selectedWorld].hue, 1.0f - expf(-6.0f * dt));
 
@@ -875,9 +970,6 @@ void UpdateAndDrawFrame() {
             }
         }
     }
-    // ------------------------------------------
-    // 화면 3: 카운트다운 및 플레이
-    // ------------------------------------------
     else if (screen == SCR_COUNTDOWN || screen == SCR_PLAYING) {
         if (IsKeyPressed(KEY_TAB)) autoPlay = !autoPlay;
         if (IsKeyPressed(KEY_ESCAPE)) screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
@@ -969,11 +1061,7 @@ void UpdateAndDrawFrame() {
                     }
 
                     if (currentMode == MODE_PERFECTIONIST && !isGoodHit) {
-                        PlaySound(sndFail);
-                        screenShake = 16.0f;
-                        failReason = "퍼펙트 챌린지: 완벽하지 않은 타이밍!";
-                        SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
-                        screen = SCR_GAMEOVER;
+                        TriggerGameOver("퍼펙트 챌린지: 완벽하지 않은 타이밍!", tiles[currentTile + 1].pos);
                     } else {
                         hitCount++;
                         streakCount++;
@@ -996,12 +1084,7 @@ void UpdateAndDrawFrame() {
                         streakCount = 0;
                         AddPopup("너무 빠름!", pivotPos, ORANGE);
                     } else {
-                        PlaySound(sndFail);
-                        screenShake = 16.0f;
-                        failReason = "너무 일찍 입력했습니다! (과부하)";
-                        SpawnHitParticles(pivotPos, RED, 32);
-                        SpawnShockwave(pivotPos, RED, 120.0f);
-                        screen = SCR_GAMEOVER;
+                        TriggerGameOver("너무 일찍 입력했습니다! (과부하)", pivotPos);
                     }
                 }
             }
@@ -1013,23 +1096,19 @@ void UpdateAndDrawFrame() {
                     AddPopup("놓침 (연습)", hitTilePos, RED);
                     AdvanceTileAfterHit(hitTilePos, true);
                 } else {
-                    PlaySound(sndFail);
-                    screenShake = 16.0f;
-                    failReason = "박자를 놓쳤습니다!";
-                    SpawnHitParticles(tiles[currentTile + 1].pos, RED, 32);
-                    SpawnShockwave(tiles[currentTile + 1].pos, RED, 120.0f);
-                    screen = SCR_GAMEOVER;
+                    TriggerGameOver("박자를 놓쳤습니다!", tiles[currentTile + 1].pos);
                 }
             }
         }
     }
-    // ------------------------------------------
-    // 화면 4 & 5: 게임오버 / 클리어
-    // ------------------------------------------
     else if (screen == SCR_GAMEOVER) {
+        if (gameOverTimer > 0.0f) gameOverTimer -= dt;
+
         if (IsKeyPressed(KEY_ESCAPE)) screen = (currentMode == MODE_ENDLESS) ? SCR_MODE_SELECT : SCR_WORLD_SELECT;
         else if (IsKeyPressed(KEY_R)) StartGame(0);
-        else if (IsHitKeyPressed())   StartGame(currentMode == MODE_JOURNEY ? lastCheckpoint : 0);
+        else if (gameOverTimer <= 0.0f && IsHitKeyPressed()) {
+            StartGame(currentMode == MODE_JOURNEY ? lastCheckpoint : 0);
+        }
     }
     else if (screen == SCR_CLEAR) {
         if (IsKeyPressed(KEY_ESCAPE)) screen = SCR_WORLD_SELECT;
@@ -1107,9 +1186,6 @@ void UpdateAndDrawFrame() {
     DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 260.0f + cameraBeatPulse * 420.0f, Fade(WHITE, 0.045f));
     DrawCircleLinesV({ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f }, 460.0f + cameraBeatPulse * 620.0f, Fade(WHITE, 0.03f));
 
-    // ------------------------------------------
-    // 렌더링 1: 모드 선택 화면
-    // ------------------------------------------
     if (screen == SCR_MODE_SELECT) {
         DrawTextCentered("얼음과 불의 춤", SCREEN_WIDTH / 2.0f, 46.0f, 52.0f, WHITE);
         DrawTextCentered("게임 모드를 선택하세요", SCREEN_WIDTH / 2.0f, 110.0f, 20.0f, SKYBLUE);
@@ -1148,7 +1224,6 @@ void UpdateAndDrawFrame() {
             }
         }
 
-        // 하단 설정 바
         DrawCardBox({ 135.0f, 532.0f, 1010.0f, 68.0f }, 0.25f, Color{ 18, 22, 34, 235 }, Fade(WHITE, 0.14f), 1.5f);
 
         DrawTextUI("판정:", 160.0f, 556.0f, 17.0f, LIGHTGRAY);
@@ -1178,9 +1253,6 @@ void UpdateAndDrawFrame() {
         return;
     }
 
-    // ------------------------------------------
-    // 렌더링 2: 월드 선택 및 코스 미리보기
-    // ------------------------------------------
     if (screen == SCR_WORLD_SELECT) {
         WorldInfo& w = worlds[selectedWorld];
         Color theme = ColorFromHSV(w.hue, 0.68f, 0.95f);
@@ -1204,7 +1276,6 @@ void UpdateAndDrawFrame() {
         Rectangle showcase = { 165.0f, 115.0f, 950.0f, 435.0f };
         DrawCardBox(showcase, 0.08f, Color{ 18, 22, 35, 245 }, theme, 2.5f);
 
-        // 왼쪽: 코스 모양 미리보기
         Rectangle mapBox = { 205.0f, 155.0f, 390.0f, 355.0f };
         DrawRectangleRounded(mapBox, 0.1f, 8, Color{ 12, 15, 24, 255 });
         DrawTextCentered("코스 모양 미리보기", mapBox.x + mapBox.width * 0.5f, mapBox.y + 16.0f, 16.0f, GRAY);
@@ -1214,17 +1285,17 @@ void UpdateAndDrawFrame() {
         for (size_t i = 0; i + 1 < previewPoints.size(); i++) {
             Vector2 p1 = { mapCenter.x + previewPoints[i].x * mapRadius, mapCenter.y + previewPoints[i].y * mapRadius };
             Vector2 p2 = { mapCenter.x + previewPoints[i + 1].x * mapRadius, mapCenter.y + previewPoints[i + 1].y * mapRadius };
-            DrawLineEx(p1, p2, 6.0f, Fade(theme, 0.75f));
+            DrawLineEx(p1, p2, 7.0f, Fade(theme, 0.45f));
+            DrawLineEx(p1, p2, 2.5f, Fade(WHITE, 0.65f));
             DrawCircleV(p1, 4.5f, WHITE);
         }
         if (!previewPoints.empty()) {
             Vector2 startPt = { mapCenter.x + previewPoints[0].x * mapRadius, mapCenter.y + previewPoints[0].y * mapRadius };
             Vector2 endPt   = { mapCenter.x + previewPoints.back().x * mapRadius, mapCenter.y + previewPoints.back().y * mapRadius };
-            DrawCircleV(startPt, 7.0f, SKYBLUE);
-            DrawCircleV(endPt, 7.0f, GOLD);
+            DrawCircleV(startPt, 7.5f, SKYBLUE);
+            DrawCircleV(endPt, 7.5f, GOLD);
         }
 
-        // 오른쪽: 월드 정보 및 시작 버튼
         float rx = 635.0f;
         DrawTextUI(TextFormat("%d월드  •  %s", selectedWorld + 1, w.diffLabel), rx, 155.0f, 20.0f, theme);
         DrawTextUI(w.name, rx, 188.0f, 38.0f, WHITE);
@@ -1266,60 +1337,108 @@ void UpdateAndDrawFrame() {
     // ------------------------------------------
     BeginMode2D(camera);
     if (!tiles.empty()) {
+        float timeNow = (float)GetTime();
+
+        std::vector<Vector2> segStart(tiles.size());
+        std::vector<Vector2> segEnd(tiles.size());
         Vector2 renderPivot = tiles[0].pos;
         for (size_t i = 0; i + 1 < tiles.size(); i++) {
-            Vector2 p1 = renderPivot;
-            Vector2 p2 = tiles[i + 1].pos;
-            Color borderCol = tiles[i].cleared ? Color{ 95, 130, 185, 255 } : Color{ 52, 65, 98, 255 };
-            Color coreCol   = tiles[i].cleared ? Color{ 38, 54, 82, 255 }  : Color{ 22, 28, 44, 255 };
-            DrawLineEx({ p1.x, p1.y + 6.0f }, { p2.x, p2.y + 6.0f }, 50.0f, Fade(BLACK, 0.35f));
-            DrawLineEx(p1, p2, 48.0f, borderCol);
-            DrawLineEx(p1, p2, 36.0f, coreCol);
+            segStart[i] = renderPivot;
+            segEnd[i]   = tiles[i + 1].pos;
             if (!tiles[i + 1].midspin) {
                 renderPivot = tiles[i + 1].pos;
             }
         }
 
-        DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.16f));
+        // [1단계] 지나간 길 & 미래의 길
+        for (size_t i = 0; i + 1 < tiles.size(); i++) {
+            if ((int)i == currentTile) continue;
+            Vector2 p1 = segStart[i];
+            Vector2 p2 = segEnd[i];
+
+            // 미드스핀으로 뻗는 연결선은 보라색 점선 궤도로 구분
+            if (tiles[i + 1].midspin) {
+                DrawDashedGlowLine(p1, p2, Fade(MAGENTA, tiles[i].cleared ? 0.30f : 0.70f));
+                continue;
+            }
+
+            Color borderCol = tiles[i].cleared ? Color{ 85, 118, 170, 175 } : Color{ 62, 78, 118, 235 };
+            Color coreCol   = tiles[i].cleared ? Color{ 32, 46, 72, 195 }  : Color{ 24, 31, 50, 240 };
+            DrawLineEx({ p1.x, p1.y + 6.0f }, { p2.x, p2.y + 6.0f }, 50.0f, Fade(BLACK, 0.28f));
+            DrawLineEx(p1, p2, 48.0f, borderCol);
+            DrawLineEx(p1, p2, 34.0f, coreCol);
+
+            if ((int)i > currentTile && (int)i <= currentTile + 3) {
+                DrawPathDirectionArrow(p1, p2, 0.52f, Fade(WHITE, 0.26f), 8.0f);
+            }
+        }
+
+        // [2단계] 현재 진행 중인 활성 길 강조
+        if (currentTile >= 0 && currentTile + 1 < (int)tiles.size()) {
+            Vector2 p1 = segStart[currentTile];
+            Vector2 p2 = segEnd[currentTile];
+            if (tiles[currentTile + 1].midspin) {
+                DrawDashedGlowLine(p1, p2, MAGENTA);
+            } else {
+                Color activeGlow = isFirePivot ? SKYBLUE : ORANGE;
+                DrawLineEx(p1, p2, 52.0f, Fade(activeGlow, 0.45f));
+                DrawLineEx(p1, p2, 44.0f, Color{ 44, 62, 95, 255 });
+                float flow = fmodf(timeNow * 1.4f, 1.0f);
+                DrawPathDirectionArrow(p1, p2, 0.25f + flow * 0.5f, Fade(WHITE, 0.80f), 10.0f);
+            }
+        }
+
+        // 공전 궤도 가이드 링
+        DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.18f));
         if (screen == SCR_PLAYING) {
             float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
             float startDeg = currentAngle * RAD2DEG;
             float endDeg   = (currentAngle + (cw ? 1.0f : -1.0f) * targetDiff * remRatio) * RAD2DEG;
             DrawRing(pivotPos, TILE_DIST - 6.0f, TILE_DIST + 2.0f, startDeg, endDeg, 24,
-                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.24f));
+                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.26f));
         }
 
-        float timeNow = (float)GetTime();
+        std::vector<int> remainingStack(tiles.size(), 1);
+        std::vector<bool> firstStackHolder(tiles.size(), true);
+        std::vector<bool> isUTurn(tiles.size(), false);
+
         for (size_t i = 0; i < tiles.size(); i++) {
-            float scale = 1.0f + tiles[i].hitAnim * 0.28f;
-            Color rimCol = (i == (size_t)currentTile) ? WHITE :
-                           (tiles[i].cleared ? Color{ 110, 150, 210, 255 } : Color{ 70, 86, 122, 255 });
-            if (currentMode != MODE_ENDLESS && i == tiles.size() - 1) rimCol = GOLD;
-
-            if (tiles[i].midspin) {
-                DrawPoly(tiles[i].pos, 3, 26.0f * scale, timeNow * 70.0f, MAGENTA);
-                DrawPoly(tiles[i].pos, 3, 16.0f * scale, timeNow * 70.0f, { 26, 30, 46, 255 });
-            } else {
-                DrawCircleV({ tiles[i].pos.x, tiles[i].pos.y + 4.0f }, 24.0f * scale, Fade(BLACK, 0.35f));
-                DrawCircleV(tiles[i].pos, 24.5f * scale, rimCol);
-                DrawCircleV(tiles[i].pos, 18.0f * scale, { 22, 26, 40, 255 });
+            int count = 0;
+            bool seenEarlierRemaining = false;
+            for (size_t j = (size_t)currentTile; j < tiles.size(); j++) {
+                if (Vector2Distance(tiles[i].pos, tiles[j].pos) < 10.0f) {
+                    if (j < i) seenEarlierRemaining = true;
+                    count++;
+                }
             }
+            remainingStack[i] = count;
+            firstStackHolder[i] = !seenEarlierRemaining;
 
-            if (currentMode != MODE_ENDLESS && i == tiles.size() - 1) {
-                DrawRing(tiles[i].pos, 11.0f, 15.0f, timeNow * 140.0f, timeNow * 140.0f + 240.0f, 24, GOLD);
-                DrawCircleV(tiles[i].pos, 7.0f + 2.0f * sinf(timeNow * 6.0f), WHITE);
+            if (i > 0 && i + 1 < tiles.size() && !tiles[i].midspin && !tiles[i + 1].midspin) {
+                Vector2 vIn  = Vector2Normalize(Vector2Subtract(segEnd[i - 1], segStart[i - 1]));
+                Vector2 vOut = Vector2Normalize(Vector2Subtract(segEnd[i], segStart[i]));
+                if (Vector2DotProduct(vIn, vOut) < -0.90f) {
+                    isUTurn[i] = true;
+                }
             }
+        }
 
-            if (tiles[i].swirl) {
-                float rot = timeNow * 200.0f;
-                DrawRing(tiles[i].pos, 9.0f, 13.5f, rot, rot + 140.0f, 16, { 240, 95, 255, 255 });
-                DrawRing(tiles[i].pos, 9.0f, 13.5f, rot + 180.0f, rot + 320.0f, 16, { 240, 95, 255, 255 });
-            }
-
-            if (tiles[i].checkpoint && currentMode == MODE_JOURNEY) {
-                DrawCircleLinesV(tiles[i].pos, 29.5f, GREEN);
-                DrawCircleLinesV(tiles[i].pos, 32.5f, Fade(GREEN, 0.45f));
-            }
+        // [3단계] 타일 Z-순서 렌더링
+        for (size_t i = 0; i < tiles.size(); i++) {
+            if ((int)i == currentTile || (int)i == currentTile + 1) continue;
+            if (!tiles[i].cleared) continue;
+            DrawSingleTile(i, timeNow, remainingStack[i], firstStackHolder[i], isUTurn[i]);
+        }
+        for (size_t i = 0; i < tiles.size(); i++) {
+            if ((int)i == currentTile || (int)i == currentTile + 1) continue;
+            if (tiles[i].cleared) continue;
+            DrawSingleTile(i, timeNow, remainingStack[i], firstStackHolder[i], isUTurn[i]);
+        }
+        if (currentTile >= 0 && currentTile < (int)tiles.size()) {
+            DrawSingleTile((size_t)currentTile, timeNow, remainingStack[currentTile], firstStackHolder[currentTile], isUTurn[currentTile]);
+        }
+        if (currentTile + 1 >= 0 && currentTile + 1 < (int)tiles.size()) {
+            DrawSingleTile((size_t)(currentTile + 1), timeNow, remainingStack[currentTile + 1], firstStackHolder[currentTile + 1], isUTurn[currentTile + 1]);
         }
 
         for (const auto& sw : shockwaves) {
@@ -1376,7 +1495,6 @@ void UpdateAndDrawFrame() {
         DrawTextUI("[오토플레이]", 990.0f, 26.0f, 18.0f, GOLD);
     }
 
-    // 하단 판정 오차 바
     int barW = 380, barH = 10;
     int barX = SCREEN_WIDTH / 2 - barW / 2;
     int barY = SCREEN_HEIGHT - 44;
@@ -1395,7 +1513,6 @@ void UpdateAndDrawFrame() {
         DrawRectangle(tx - 2, barY - 5, 4, barH + 10, Fade(tk.color, tk.alpha));
     }
 
-    // --- 상태 오버레이 ---
     if (screen == SCR_COUNTDOWN) {
         const char* cdText = (countdownBeats == 3) ? "3" :
                              (countdownBeats == 2) ? "2" :
@@ -1410,10 +1527,12 @@ void UpdateAndDrawFrame() {
             DrawTextCentered(TextFormat("생존 기록: %d 타일  (최고 기록: %d 타일)", endlessTilesCleared, bestEndlessScore),
                              SCREEN_WIDTH / 2.0f, 332.0f, 22.0f, SKYBLUE);
         }
-        const char* retryMsg = (currentMode == MODE_JOURNEY && lastCheckpoint > 0)
-            ? "[SPACE] 체크포인트 부활   |   [R] 처음부터   |   [ESC] 메뉴"
-            : "[SPACE] 다시 도전   |   [ESC] 메뉴";
-        DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 390.0f, 22.0f, WHITE);
+        if (gameOverTimer <= 0.0f) {
+            const char* retryMsg = (currentMode == MODE_JOURNEY && lastCheckpoint > 0)
+                ? "[SPACE] 체크포인트 부활   |   [R] 처음부터   |   [ESC] 메뉴"
+                : "[SPACE] 다시 도전   |   [ESC] 메뉴";
+            DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 390.0f, 22.0f, WHITE);
+        }
     }
     else if (screen == SCR_CLEAR) {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.70f));
