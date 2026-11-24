@@ -1,4 +1,4 @@
-=name: Build C++ Game and Deploy to GitHub Pages
+name: Build C++ Game and Deploy to GitHub Pages
 
 on:
   push:
