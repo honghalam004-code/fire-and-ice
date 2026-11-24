@@ -18,7 +18,7 @@ const int SCREEN_WIDTH = 1280;
 const int SCREEN_HEIGHT = 720;
 const float TILE_DIST = 96.0f;
 const float PLANET_RADIUS = 16.5f;
-const int WORLD_COUNT = 6;
+const int WORLD_COUNT = 10;
 
 enum ScreenState {
     SCR_MODE_SELECT,
@@ -30,7 +30,7 @@ enum ScreenState {
 };
 
 enum GameMode {
-    MODE_JOURNEY = 0,      // 월드 투어 (6개 테마 월드)
+    MODE_JOURNEY = 0,      // 월드 투어 (10개 테마 월드)
     MODE_ENDLESS = 1,      // 무한 러시 (생존 모드)
     MODE_ZEN = 2,          // 연습 모드 (게임오버 없음)
     MODE_PERFECTIONIST = 3 // 퍼펙트 챌린지 (원히트 도전)
@@ -135,46 +135,74 @@ const float NOTE_FREQS[18] = {
 
 WorldInfo worlds[WORLD_COUNT] = {
     {
-        "첫 번째 불꽃", "매우 쉬움", "오르골 발라드",
-        "직진과 90도 회전만 등장하는 입문 코스",
-        96.0f, 1, 24.0f,
+        "첫 번째 불꽃", "입문 1", "오르골 발라드",
+        "직진과 90도 계단으로 박자를 익히는 기초 산책로",
+        92.0f, 1, 24.0f,
         { 3, 7, 10, 12, 10, 7, 5, 10 },
         { 3, 8, 3, 10 }, 0, false, 0.0f
     },
     {
-        "산들바람 왈츠", "쉬움", "따뜻한 일렉트릭 피아노",
-        "계단형 코스와 첫 소용돌이(회전 반전)",
-        108.0f, 2, 165.0f,
+        "호숫가의 징검다리", "입문 2", "잔잔한 일렉트릭 피아노",
+        "사각 연못 둘레와 첫 소용돌이(회전 방향 반전)",
+        98.0f, 2, 165.0f,
         { 8, 12, 15, 17, 16, 12, 10, 15 },
         { 8, 5, 10, 3 }, 1, false, 0.0f
     },
     {
-        "빙하의 나선", "보통", "크리스탈 겨울 차임",
-        "달팽이 나선형 코스와 45도 대각선",
-        120.0f, 3, 198.0f,
+        "산들바람 언덕", "초급 1", "맑은 겨울 차임",
+        "45도 완만한 오르막·내리막 능선을 넘는 경쾌한 코스",
+        104.0f, 3, 195.0f,
         { 12, 15, 17, 14, 15, 12, 10, 7 },
         { 0, 8, 3, 10 }, 2, false, 0.0f
     },
     {
-        "별빛 무도회", "도전", "천상의 하프 아르페지오",
-        "다이아몬드 광장, 삼각 미드스핀, 360도 유턴",
-        132.0f, 4, 248.0f,
+        "달팽이 정원", "초급 2", "따뜻한 오르골 하모니",
+        "안으로 감겼다가 반전으로 빠져나오는 달팽이 나선",
+        110.0f, 4, 130.0f,
+        { 5, 8, 10, 12, 15, 12, 10, 8 },
+        { 5, 0, 8, 10 }, 0, false, 0.0f
+    },
+    {
+        "쌍둥이 부메랑", "중급 1", "천상의 하프 아르페지오",
+        "길 끝에서 180도 되돌아오는 왕복 부메랑 코스",
+        116.0f, 5, 42.0f,
         { 5, 8, 12, 15, 14, 10, 12, 8 },
         { 5, 10, 1, 0 }, 3, false, 0.0f
     },
     {
-        "육각 성채", "어려움", "레트로 신스웨이브 리프",
-        "60도·120도 육각형 벌집 셋잇단음표 코스",
-        144.0f, 5, 290.0f,
+        "별빛 다이아몬드", "중급 2", "몽환적 첼레스타 선율",
+        "반짝이는 마름모 광장과 첫 삼각 미드스핀(왈츠 박자)",
+        122.0f, 6, 248.0f,
+        { 7, 10, 14, 15, 14, 10, 7, 10 },
+        { 7, 3, 8, 10 }, 2, false, 0.0f
+    },
+    {
+        "벌집의 춤", "상급 1", "레트로 신스웨이브 리프",
+        "60도·120도 육각형 벌집 테두리를 도는 리듬 코스",
+        128.0f, 7, 54.0f,
         { 7, 8, 11, 14, 15, 14, 11, 8 },
         { 7, 8, 5, 7 }, 4, false, 0.0f
     },
     {
-        "일식의 피날레", "마스터", "웅장한 보스 오르간",
-        "모든 기믹이 총출동하는 십자 요새 코스",
-        156.0f, 6, 345.0f,
+        "모래시계 회랑", "상급 2", "깊은 일렉트로닉 펄스",
+        "대각선이 교차하는 모래시계 모양과 연속 방향 반전",
+        135.0f, 8, 285.0f,
+        { 0, 3, 7, 10, 12, 10, 7, 3 },
+        { 0, 5, 7, 0 }, 1, false, 0.0f
+    },
+    {
+        "왕관의 성채", "도전 1", "웅장한 파이프 오르간",
+        "뾰족한 왕관 능선을 따라 이어지는 미드스핀 콤보",
+        142.0f, 9, 340.0f,
         { 3, 6, 10, 11, 10, 6, 5, 2 },
         { 3, 11, 8, 10 }, 5, false, 0.0f
+    },
+    {
+        "무지개 피날레", "도전 2", "축제 심포니 오르간",
+        "1~9월드의 모든 기믹이 어우러지는 신나는 대단원",
+        150.0f, 10, 315.0f,
+        { 3, 7, 10, 15, 14, 10, 12, 15 },
+        { 3, 10, 8, 10 }, 5, false, 0.0f
     }
 };
 
@@ -198,7 +226,7 @@ int bestEndlessScore = 0;
 bool isFirePivot = true;
 bool cw = true;
 
-float currentBpm = 96.0f;
+float currentBpm = 92.0f;
 float currentAngle = 0.0f;
 float targetDiff = PI;
 float traveledAngle = 0.0f;
@@ -208,7 +236,7 @@ float beatTimer = 0.0f;
 int totalBeatCount = 0;
 float cameraBeatPulse = 0.0f;
 float screenShake = 0.0f;
-float gameOverTimer = 0.0f; // 게임오버 직후 오입력 재시작 방지 타이머
+float gameOverTimer = 0.0f;
 float bgHue = 24.0f;
 
 int hitCount = 0;
@@ -246,11 +274,11 @@ Font LoadKoreanFont(const char* path, int fontSize) {
     }
 
     allChars +=
-        "얼음과 불의 춤 게임 모드를 선택하세요 월드 투어 개 입문부터 마스터까지 고유한 음악과 코스를 정복하세요 "
+        "얼음과 불의 춤 게임 모드를 선택하세요 월드 투어 개 입문부터 도전까지 고유한 음악과 코스를 정복하세요 "
         "무한 러시 생존 모드 끝없이 생성되는 랜덤 코스를 밟으며 최고 기록에 도전하세요 연습 게임오버 없음 "
         "박자를 놓쳐도 실패하지 않고 끝까지 연습할 수 있습니다 퍼펙트 챌린지 원히트 도전 "
         "단 한 번의 실수나 어긋남도 허용되지 않는 고수용 모드입니다 최고 기록 타일 "
-        "클릭 또는 방향키로 선택 판정 쉬움 보통 엄격 오토플레이 켜짐 꺼짐 싱크 "
+        "클릭 또는 방향키로 선택 판정 쉬움 보통 엄격 오토플레이 켜짐 꺼짐 싱크 조작 "
         "모드 선택 코스 모양 미리보기 월드 시작 난이도 음악 고정 코스 상태 클리어 완료 최고 정확도 "
         "아직 클리어하지 않음 진행률 연속 메뉴 빠름 느림 완벽 너무 체크포인트 놓침 준비 "
         "행성 파괴 퍼펙트 챌린지 완벽하지 않은 타이밍 일찍 입력했습니다 과부하 놓쳤습니다 "
@@ -421,76 +449,111 @@ void EnsureAudioInitialized() {
 }
 
 // ==========================================
-// 5. 6개 테마 월드 코스 생성기 (미드스핀 박자 균일화)
+// 5. 10개 테마 월드 코스 생성기 (점진적 난이도 + 다채로운 코스)
 // ==========================================
 std::vector<MapStep> GetWorldSteps(int worldIdx) {
     if (worldIdx == 0) {
+        // 1월드: 첫 번째 불꽃 (직선과 90도 계단 기초)
         return {
-            {0}, {0}, {0}, {0}, {0}, {0},
-            {-90}, {0}, {0}, {0},
+            {0}, {0}, {0}, {0},
+            {-90}, {0}, {-90}, {0},
             {0, false, false, true},
-            {0}, {90}, {0}, {0}, {0},
-            {-90}, {0}, {0}, {0}, {0}, {0}
+            {0}, {90}, {0}, {90},
+            {0}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 1) {
+        // 2월드: 호숫가의 징검다리 (사각 연못 + 첫 소용돌이 방향 반전)
         return {
-            {0}, {0}, {0},
-            {-90}, {0}, {-90}, {0}, {-90}, {0},
-            {0, true}, {0}, {0}, {0},
-            {90, false, false, true}, {0}, {90}, {0}, {90}, {0},
-            {0, true}, {0}, {-90}, {0}, {0}, {0}, {0}
+            {0}, {0}, {-90}, {-90}, {180}, {180}, {90}, {0},
+            {0, false, false, true},
+            {0, true}, {0}, {90}, {90}, {0}, {0}, {-90}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 2) {
+        // 3월드: 산들바람 언덕 (45도 완만한 오르막·내리막 능선)
         return {
-            {0}, {0}, {0}, {0},
-            {90}, {90}, {90},
-            {180}, {180},
-            {-90}, {-90},
+            {0}, {0}, {-45}, {-45}, {0}, {45}, {45}, {0},
             {0, false, false, true},
-            {0, true}, {0},
-            {-45}, {45}, {-45}, {45}, {-45}, {45},
-            {0, true}, {0}, {-90}, {0}, {90}, {0}, {0}, {0}
+            {-45}, {45}, {-45}, {45},
+            {0, true}, {0}, {-45}, {0}, {45}, {0}, {0}
         };
     }
     else if (worldIdx == 3) {
-        // 4월드: 미드스핀 각도를 회전 방향에 맞춰 270도(1.5박자) 왈츠 리듬으로 통일
+        // 4월드: 달팽이 정원 (나선형 회전 + 방향 반전 탈출)
         return {
-            {0}, {-45}, {-45}, {45}, {45},
-            {90, false, true}, {0}, {90, false, true}, {0},
-            {0, true}, {0}, {180}, {0},
+            {0}, {0}, {0},
+            {90}, {90}, {180}, {180}, {-90},
+            {0, true},
+            {-90}, {180}, {180}, {90}, {90}, {0},
             {0, false, false, true},
-            {45}, {45}, {-45}, {-45},
-            {-90, false, true}, {0}, {-90, false, true}, {0},
-            {0, true}, {0}, {-90}, {0}, {90}, {0}, {0}, {0}
+            {0}, {-90}, {0}, {90}, {0}, {0}, {0}
         };
     }
     else if (worldIdx == 4) {
-        // 5월드: 육각 성채 (미드스핀이 0.33박자로 쪼개지지 않도록 방향에 맞게 배치)
+        // 5월드: 쌍둥이 부메랑 (180도 왕복 부메랑 코스)
+        return {
+            {0}, {0}, {0}, {180}, {180},
+            {-90}, {0}, {0},
+            {0, false, false, true},
+            {45}, {45}, {-135}, {-135},
+            {0, true}, {0}, {90}, {0}, {-90}, {0}, {0}
+        };
+    }
+    else if (worldIdx == 5) {
+        // 6월드: 별빛 다이아몬드 (마름모 광장 + 첫 삼각 미드스핀 왈츠)
+        return {
+            {0}, {-45}, {-45}, {45}, {45},
+            {90, false, true}, {0}, {90, false, true}, {0},
+            {0, false, false, true},
+            {45}, {45}, {-45}, {-45},
+            {0, true},
+            {-90, false, true}, {0}, {0}, {0}
+        };
+    }
+    else if (worldIdx == 6) {
+        // 7월드: 벌집의 춤 (60도·120도 육각형 벌집 테두리)
         return {
             {0}, {-60}, {0}, {60}, {120}, {60}, {0},
-            {60, false, true}, {0}, {60, false, true}, {0},
-            {0, true}, {0}, {-60}, {-120}, {-60}, {0},
             {0, false, false, true},
-            {60}, {0}, {-60}, {0}, {60}, {0}, {-60}, {0},
-            {180, true}, {0}, {60, false, true}, {0},
+            {0, true},
+            {60}, {0}, {-60}, {-120}, {-60}, {0},
+            {-60}, {60}, {-60}, {60}, {0}, {0}
+        };
+    }
+    else if (worldIdx == 7) {
+        // 8월드: 모래시계 회랑 (대각선 교차 모래시계 + 연속 방향 반전)
+        return {
+            {0}, {-45}, {-45}, {90}, {45}, {45},
+            {0, false, false, true},
+            {0, true}, {-90, true}, {0, true}, {90, true},
+            {-45}, {45}, {135}, {-135},
+            {0, true}, {0}, {-45}, {45}, {0}, {0}
+        };
+    }
+    else if (worldIdx == 8) {
+        // 9월드: 왕관의 성채 (왕관 톱니 능선 + 미드스핀 콤보)
+        return {
+            {0}, {-45}, {45}, {-90}, {90}, {-45}, {45}, {0},
+            {0, false, false, true},
+            {90, false, true}, {0}, {90, false, true}, {0},
+            {0, true},
+            {-45}, {45}, {-45}, {45},
+            {-90, false, true}, {0}, {-90, false, true}, {0},
             {0, true}, {0}, {0}, {0}
         };
     }
     else {
-        // 6월드: 일식의 피날레 (균일한 미드스핀 콤보)
+        // 10월드: 무지개 피날레 (1~9월드 핵심 기믹 총정리 축제 코스)
         return {
-            {0}, {-90}, {0}, {90}, {0},
-            {0, true}, {-90, true}, {0, true}, {90, true},
-            {90, false, true}, {0}, {90, false, true}, {0},
+            {0}, {0}, {-90}, {0}, {90}, {0},
+            {90}, {180}, {-90}, {0},
             {0, false, false, true},
-            {-45}, {45}, {-45}, {45}, {180, true}, {0},
-            {-60}, {0}, {60}, {0}, {-60}, {0}, {60}, {0},
+            {0, true}, {-45}, {45}, {-45}, {45}, {0},
+            {-90, false, true}, {0}, {-90, false, true}, {0},
             {0, false, false, true},
-            {-90}, {0}, {-90}, {0}, {90}, {0}, {90}, {0},
-            {90, false, true}, {0}, {90, false, true}, {0},
-            {0, true}, {0}, {0}, {0}
+            {0, true}, {60}, {0}, {-60}, {0}, {180}, {0},
+            {90, false, true}, {0}, {0}, {0}
         };
     }
 }
@@ -744,7 +807,7 @@ void DrawPathDirectionArrow(Vector2 p1, Vector2 p2, float tPos, Color col, float
 void TriggerGameOver(const std::string& reason, Vector2 effectPos) {
     PlaySound(sndFail);
     screenShake = 16.0f;
-    gameOverTimer = 0.55f; // 0.55초 동안 실수로 즉시 재시작되는 것을 방지
+    gameOverTimer = 0.55f;
     failReason = reason;
     SpawnHitParticles(effectPos, RED, 32);
     SpawnShockwave(effectPos, RED, 120.0f);
@@ -767,7 +830,7 @@ void StartGame(int startFromTile = 0) {
         tiles.push_back({ startPos, false, false, false, true, 0.0f });
         endlessBuildPivot = startPos;
         endlessTilesCleared = 0;
-        currentBpm = 126.0f;
+        currentBpm = 122.0f;
         bgHue = 185.0f;
         AppendEndlessTiles(40);
         startFromTile = 0;
@@ -812,10 +875,13 @@ void StartGame(int startFromTile = 0) {
     PlaySound(sndKick);
 }
 
+// Z, X, C, V 포함 모든 리듬 타격 키 입력 감지
 bool IsHitKeyPressed() {
-    return IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_Z) || IsKeyPressed(KEY_X) ||
-           IsKeyPressed(KEY_J) || IsKeyPressed(KEY_K) || IsKeyPressed(KEY_D) ||
-           IsKeyPressed(KEY_F) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    return IsKeyPressed(KEY_SPACE) ||
+           IsKeyPressed(KEY_Z) || IsKeyPressed(KEY_X) || IsKeyPressed(KEY_C) || IsKeyPressed(KEY_V) ||
+           IsKeyPressed(KEY_D) || IsKeyPressed(KEY_F) || IsKeyPressed(KEY_J) || IsKeyPressed(KEY_K) ||
+           IsKeyPressed(KEY_N) || IsKeyPressed(KEY_M) ||
+           IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
 void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
@@ -962,7 +1028,7 @@ void UpdateAndDrawFrame() {
             }
 
             for (int w = 0; w < WORLD_COUNT; w++) {
-                Rectangle pill = { 335.0f + w * 102.0f, 595.0f, 88.0f, 46.0f };
+                Rectangle pill = { 115.0f + w * 106.0f, 595.0f, 96.0f, 46.0f };
                 if (CheckCollisionPointRec(mp, pill)) {
                     selectedWorld = w;
                     UpdateWorldPreview(selectedWorld);
@@ -1191,9 +1257,9 @@ void UpdateAndDrawFrame() {
         DrawTextCentered("게임 모드를 선택하세요", SCREEN_WIDTH / 2.0f, 110.0f, 20.0f, SKYBLUE);
 
         const char* modeTitles[4] = { "월드 투어", "무한 러시", "연습 모드", "퍼펙트 챌린지" };
-        const char* modeBadges[4] = { "6개 월드", "생존 모드", "게임오버 없음", "원히트 도전" };
+        const char* modeBadges[4] = { "10개 월드", "생존 모드", "게임오버 없음", "원히트 도전" };
         const char* modeDescs[4]  = {
-            "입문부터 마스터까지 6개의 고유한 음악과 코스를 정복하세요.",
+            "입문부터 도전까지 10개의 고유한 음악과 코스를 정복하세요.",
             "끝없이 생성되는 랜덤 코스를 밟으며 최고 기록에 도전하세요.",
             "박자를 놓쳐도 실패하지 않고 끝까지 연습할 수 있습니다.",
             "단 한 번의 실수나 어긋남도 허용되지 않는 고수용 모드입니다."
@@ -1249,6 +1315,8 @@ void UpdateAndDrawFrame() {
         DrawTextCentered("+", offPlus.x + 20.0f, offPlus.y + 7.0f, 20.0f, WHITE, false);
         DrawTextCentered(TextFormat("%.0f ms", audioOffsetMs), 870.0f, 556.0f, 17.0f, WHITE);
 
+        DrawTextCentered("조작: Z / X / C / V / SPACE / 클릭", SCREEN_WIDTH / 2.0f, 622.0f, 16.0f, GRAY);
+
         EndDrawing();
         return;
     }
@@ -1301,9 +1369,9 @@ void UpdateAndDrawFrame() {
         DrawTextUI(w.name, rx, 188.0f, 38.0f, WHITE);
 
         DrawTextUI("난이도:", rx, 248.0f, 17.0f, GRAY);
-        for (int d = 0; d < 6; d++) {
+        for (int d = 0; d < 10; d++) {
             Color segCol = (d < w.difficultyLevel) ? theme : Fade(WHITE, 0.12f);
-            DrawRectangleRounded({ rx + 75.0f + d * 52.0f, 246.0f, 44.0f, 18.0f }, 0.3f, 4, segCol);
+            DrawRectangleRounded({ rx + 75.0f + d * 35.0f, 246.0f, 29.0f, 18.0f }, 0.3f, 4, segCol);
         }
 
         DrawTextUI(TextFormat("음악: %s (%.0f BPM 고정)", w.songStyle, w.bpm), rx, 290.0f, 18.0f, LIGHTGRAY);
@@ -1318,14 +1386,14 @@ void UpdateAndDrawFrame() {
         Rectangle playBtn = { rx, 445.0f, 430.0f, 64.0f };
         bool hoverPlay = CheckCollisionPointRec(mp, playBtn);
         DrawRectangleRounded(playBtn, 0.25f, 8, hoverPlay ? WHITE : theme);
-        DrawTextCentered("월드 시작  [SPACE]", playBtn.x + playBtn.width * 0.5f, playBtn.y + 18.0f, 24.0f, BLACK, false);
+        DrawTextCentered("월드 시작  [SPACE / ZXCV]", playBtn.x + playBtn.width * 0.5f, playBtn.y + 18.0f, 22.0f, BLACK, false);
 
         for (int i = 0; i < WORLD_COUNT; i++) {
-            Rectangle pill = { 335.0f + i * 102.0f, 595.0f, 88.0f, 46.0f };
+            Rectangle pill = { 115.0f + i * 106.0f, 595.0f, 96.0f, 46.0f };
             bool isSel = (i == selectedWorld);
             Color pCol = ColorFromHSV(worlds[i].hue, 0.65f, 0.95f);
             DrawCardBox(pill, 0.3f, isSel ? Fade(pCol, 0.32f) : Color{ 20, 24, 38, 230 }, isSel ? pCol : Fade(WHITE, 0.16f), 2.0f);
-            DrawTextCentered(TextFormat("%d월드", i + 1), pill.x + 44.0f, pill.y + 13.0f, 18.0f, isSel ? WHITE : LIGHTGRAY);
+            DrawTextCentered(TextFormat("%d월드", i + 1), pill.x + 48.0f, pill.y + 13.0f, 17.5f, isSel ? WHITE : LIGHTGRAY);
         }
 
         EndDrawing();
@@ -1356,7 +1424,6 @@ void UpdateAndDrawFrame() {
             Vector2 p1 = segStart[i];
             Vector2 p2 = segEnd[i];
 
-            // 미드스핀으로 뻗는 연결선은 보라색 점선 궤도로 구분
             if (tiles[i + 1].midspin) {
                 DrawDashedGlowLine(p1, p2, Fade(MAGENTA, tiles[i].cleared ? 0.30f : 0.70f));
                 continue;
@@ -1388,7 +1455,6 @@ void UpdateAndDrawFrame() {
             }
         }
 
-        // 공전 궤도 가이드 링
         DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.18f));
         if (screen == SCR_PLAYING) {
             float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
@@ -1529,8 +1595,8 @@ void UpdateAndDrawFrame() {
         }
         if (gameOverTimer <= 0.0f) {
             const char* retryMsg = (currentMode == MODE_JOURNEY && lastCheckpoint > 0)
-                ? "[SPACE] 체크포인트 부활   |   [R] 처음부터   |   [ESC] 메뉴"
-                : "[SPACE] 다시 도전   |   [ESC] 메뉴";
+                ? "[SPACE / ZXCV] 체크포인트 부활   |   [R] 처음부터   |   [ESC] 메뉴"
+                : "[SPACE / ZXCV] 다시 도전   |   [ESC] 메뉴";
             DrawTextCentered(retryMsg, SCREEN_WIDTH / 2.0f, 390.0f, 22.0f, WHITE);
         }
     }
@@ -1539,7 +1605,7 @@ void UpdateAndDrawFrame() {
         DrawTextCentered("월드 클리어!", SCREEN_WIDTH / 2.0f, 215.0f, 58.0f, GOLD);
         DrawTextCentered(TextFormat("최종 정확도: %.2f%%   (완벽 판정: %d / %d)", accPct, perfectCount, hitCount),
                          SCREEN_WIDTH / 2.0f, 292.0f, 24.0f, SKYBLUE);
-        DrawTextCentered("[SPACE] 다음 월드   |   [ESC] 월드 선택",
+        DrawTextCentered("[SPACE / ZXCV] 다음 월드   |   [ESC] 월드 선택",
                          SCREEN_WIDTH / 2.0f, 365.0f, 22.0f, WHITE);
     }
 
