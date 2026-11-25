@@ -42,11 +42,10 @@ enum Strictness {
     STRICT_STRICT = 2
 };
 
-// 악보의 한 음표(Note)가 곧 하나의 타일 각도(박자 길이)를 결정함!
 struct SongNote {
-    float beatLen;      // 1.0f = 180도(1박), 0.5f = 90도(반박), 1.5f = 270도, 2.0f = 360도(유턴), 0.0f = 미드스핀
+    float beatLen;      // 1.0f = 180도(1박), 0.5f = 90도(반박), 0.75f = 135도, 2.0f = 360도(유턴)
     int turnDir;        // 0: 직진/유지, -1: 위/반시계 꺾임, +1: 아래/시계 꺾임, 2: 유턴(180도 반전)
-    int melodyMidi;     // 이 타일을 밟는 순간 울리는 멜로디 음정 (MIDI 번호, -1이면 드럼만)
+    int melodyMidi;     // 이 타일을 밟는 순간 울리는 멜로디 음정 (MIDI 번호)
     int chordRootMidi;  // 현재 마디의 화음 루트 (MIDI 번호, 0이면 유지)
     int drumType;       // 0: 없음, 1: 킥+베이스, 2: 스네어, 3: 하이햇, 4: 심벌 크래시
     bool swirl;         // 소용돌이 (회전 방향 반전)
@@ -134,28 +133,27 @@ struct WorldInfo {
     float bpm;
     int difficultyLevel;
     float hue;
-    int synthPreset; // 0: 일렉트릭 그랜드, 1: 오르골 첼레스타, 2: 슈퍼소 신스웨이브, 3: 파이프 오르간
+    int synthPreset;
     bool cleared;
     float bestAcc;
 };
 
 // ==========================================
 // 2. 실시간 DSP 신디사이저 오디오 스트림 엔진
-//    (끊김 없는 스테레오 화음 + 딜레이 에코 + 사이드체인 베이스)
 // ==========================================
 const int SAMPLE_RATE = 44100;
-const int DELAY_BUF_LEN = 22050; // 0.5초 스테레오 딜레이 에코 버퍼
+const int DELAY_BUF_LEN = 22050;
 
 struct SynthVoice {
     bool active = false;
-    int type = 0;       // 0: 리드 벨/피아노, 1: 따뜻한 화음 패드, 2: 서브 베이스, 3: 킥, 4: 스네어, 5: 하이햇, 6: FX
+    int type = 0;
     float freq = 440.0f;
     float phase1 = 0.0f;
     float phase2 = 0.0f;
     float time = 0.0f;
     float duration = 0.5f;
     float volume = 0.3f;
-    float pan = 0.0f;   // -1.0(좌) ~ +1.0(우)
+    float pan = 0.0f;
     float lpState = 0.0f;
 };
 
@@ -199,7 +197,7 @@ void TriggerVoice(int type, float freq, float duration, float volume, float pan 
     voices[slot].lpState = 0.0f;
 
     if (type == 3) {
-        sidechainDuck = 0.28f; // 킥이 칠 때 패드가 숨쉬듯 울리는 사이드체인 펌핑!
+        sidechainDuck = 0.28f;
     }
 }
 
@@ -216,30 +214,26 @@ void PlayNoteForTile(const Tile& t, int preset, bool isMinorScale) {
     if (!audioReady) return;
     activeSynthPreset = preset;
 
-    // 1. 화음 진행 변경 시 풍성한 3화음 패드 + 서브 베이스 트리거
     if (t.chordRootMidi > 0) {
         PlayChordPad(t.chordRootMidi, isMinorScale);
     }
 
-    // 2. 타일 고유 멜로디 음정 재생 (박자 길이에 맞춰 여운 조절)
     if (t.melodyMidi > 0) {
         float noteDur = Clamp(t.beatLen * 0.65f, 0.32f, 1.4f);
         float pan = sinf((float)t.melodyMidi * 0.7f) * 0.35f;
         TriggerVoice(0, MidiToFreq(t.melodyMidi), noteDur, 0.32f, pan);
-        // 옥타브 하모니 플럭 추가
         TriggerVoice(0, MidiToFreq(t.melodyMidi + 12), noteDur * 0.6f, 0.10f, -pan);
     }
 
-    // 3. 타일 리듬에 동기화된 드럼 킷
     if (t.drumType == 1) {
-        TriggerVoice(3, 135.0f, 0.22f, 0.48f, 0.0f); // 묵직한 킥
+        TriggerVoice(3, 135.0f, 0.22f, 0.48f, 0.0f);
     } else if (t.drumType == 2) {
-        TriggerVoice(4, 210.0f, 0.18f, 0.34f, 0.05f); // 스네어
+        TriggerVoice(4, 210.0f, 0.18f, 0.34f, 0.05f);
     } else if (t.drumType == 3) {
-        TriggerVoice(5, 6000.0f, 0.06f, 0.16f, -0.25f); // 하이햇
+        TriggerVoice(5, 6000.0f, 0.06f, 0.16f, -0.25f);
     } else if (t.drumType == 4) {
         TriggerVoice(3, 140.0f, 0.25f, 0.52f, 0.0f);
-        TriggerVoice(5, 4500.0f, 0.55f, 0.24f, 0.25f); // 심벌 크래시
+        TriggerVoice(5, 4500.0f, 0.55f, 0.24f, 0.25f);
     }
 }
 
@@ -263,81 +257,70 @@ void AudioStreamCallback(void* buffer, unsigned int frames) {
                 continue;
             }
 
-            float t = v.time;
-            float normT = t / v.duration;
+            float vt = v.time;
+            float normT = vt / v.duration;
             float s = 0.0f;
 
             if (v.type == 0) {
-                // 리드 악기 (월드 테마별 음색)
                 v.phase1 += v.freq * dt;
                 v.phase2 += (v.freq * 1.003f) * dt;
-                float env = fminf(1.0f, t * 90.0f) * expf(-t * (3.2f / fmaxf(0.35f, v.duration)));
+                float env = fminf(1.0f, vt * 90.0f) * expf(-vt * (3.2f / fmaxf(0.35f, v.duration)));
 
                 if (activeSynthPreset == 0) {
-                    // 일렉트릭 그랜드 피아노
                     float raw = sinf(2.0f * PI * v.phase1) * 0.62f
-                              + sinf(4.0f * PI * v.phase1) * 0.26f * expf(-t * 5.0f)
-                              + sinf(6.0f * PI * v.phase1) * 0.12f * expf(-t * 9.0f);
+                              + sinf(4.0f * PI * v.phase1) * 0.26f * expf(-vt * 5.0f)
+                              + sinf(6.0f * PI * v.phase1) * 0.12f * expf(-vt * 9.0f);
                     s = raw * env;
                 } else if (activeSynthPreset == 1) {
-                    // 영롱한 첼레스타 / 오르골 벨
                     float raw = sinf(2.0f * PI * v.phase1) * 0.55f
                               + sinf(4.0f * PI * v.phase2) * 0.30f
-                              + sinf(8.0f * PI * v.phase1) * 0.15f * expf(-t * 14.0f);
+                              + sinf(8.0f * PI * v.phase1) * 0.15f * expf(-vt * 14.0f);
                     s = raw * env;
                 } else if (activeSynthPreset == 2) {
-                    // 디튠 슈퍼소 신스웨이브 (로패스 필터 적용)
                     float saw1 = 2.0f * (v.phase1 - floorf(0.5f + v.phase1));
                     float saw2 = 2.0f * (v.phase2 - floorf(0.5f + v.phase2));
                     float raw = (saw1 + saw2) * 0.42f + sinf(PI * v.phase1) * 0.35f;
-                    float cutoff = 0.14f + 0.22f * expf(-t * 6.0f);
+                    float cutoff = 0.14f + 0.22f * expf(-vt * 6.0f);
                     v.lpState += cutoff * (raw - v.lpState);
                     s = v.lpState * env;
                 } else {
-                    // 대성당 파이프 오르간
                     float raw = sinf(PI * v.phase1) * 0.35f
                               + sinf(2.0f * PI * v.phase1) * 0.40f
                               + sinf(4.0f * PI * v.phase2) * 0.25f;
-                    s = raw * fminf(1.0f, t * 40.0f) * (1.0f - normT * normT);
+                    s = raw * fminf(1.0f, vt * 40.0f) * (1.0f - normT * normT);
                 }
             } else if (v.type == 1) {
-                // 따뜻한 스트링/신스 3화음 패드 (사이드체인 펌핑 적용)
                 v.phase1 += v.freq * dt;
                 v.phase2 += (v.freq * 1.004f) * dt;
-                float env = fminf(1.0f, t * 3.5f) * expf(-t * 1.25f) * sidechainDuck;
+                float env = fminf(1.0f, vt * 3.5f) * expf(-vt * 1.25f) * sidechainDuck;
                 float saw = (2.0f * (v.phase1 - floorf(0.5f + v.phase1))
                            + 2.0f * (v.phase2 - floorf(0.5f + v.phase2))) * 0.35f;
                 float sine = sinf(2.0f * PI * v.phase1) * 0.45f;
                 v.lpState += 0.08f * ((saw + sine) - v.lpState);
                 s = v.lpState * env;
             } else if (v.type == 2) {
-                // 묵직한 서브 베이스
                 v.phase1 += v.freq * dt;
-                float env = fminf(1.0f, t * 45.0f) * expf(-t * 2.8f);
+                float env = fminf(1.0f, vt * 45.0f) * expf(-vt * 2.8f);
                 s = (sinf(2.0f * PI * v.phase1) * 0.85f + sinf(4.0f * PI * v.phase1) * 0.15f) * env;
             } else if (v.type == 3) {
-                // 펀치감 있는 킥 드럼
-                float pitch = v.freq * expf(-t * 26.0f) + 44.0f;
+                float pitch = v.freq * expf(-vt * 26.0f) + 44.0f;
                 v.phase1 += pitch * dt;
-                float env = expf(-t * 14.5f);
+                float env = expf(-vt * 14.5f);
                 s = sinf(2.0f * PI * v.phase1) * env;
             } else if (v.type == 4) {
-                // 스네어 드럼
                 rngState = rngState * 1664525u + 1013904223u;
                 float noise = ((float)(rngState >> 16) / 32768.0f) - 1.0f;
                 v.phase1 += 185.0f * dt;
-                float env = expf(-t * 20.0f);
-                s = (noise * 0.68f + sinf(2.0f * PI * v.phase1) * 0.32f * expf(-t * 32.0f)) * env;
+                float env = expf(-vt * 20.0f);
+                s = (noise * 0.68f + sinf(2.0f * PI * v.phase1) * 0.32f * expf(-vt * 32.0f)) * env;
             } else if (v.type == 5) {
-                // 하이햇 / 심벌
                 rngState = rngState * 1664525u + 1013904223u;
                 float noise = ((float)(rngState >> 16) / 32768.0f) - 1.0f;
-                float env = expf(-t * (v.duration > 0.2f ? 7.5f : 58.0f));
+                float env = expf(-vt * (v.duration > 0.2f ? 7.5f : 58.0f));
                 s = noise * env;
             } else if (v.type == 6) {
-                // 기믹/실패/클리어 효과음
                 v.phase1 += v.freq * dt;
-                float env = expf(-t * 9.0f);
+                float env = expf(-vt * 9.0f);
                 s = (sinf(2.0f * PI * v.phase1) * 0.7f + sinf(4.0f * PI * v.phase1) * 0.3f) * env;
             }
 
@@ -347,14 +330,12 @@ void AudioStreamCallback(void* buffer, unsigned int frames) {
             mixL += s * gainL;
             mixR += s * gainR;
 
-            // 리드 악기(type 0)와 스네어(type 4)를 스테레오 딜레이 에코로 전송
             if (v.type == 0 || v.type == 4) {
                 delayLineL[delayWriteIdx] += s * 0.26f * gainR;
                 delayLineR[delayWriteIdx] += s * 0.26f * gainL;
             }
         }
 
-        // 스테레오 피드백 딜레이 에코 읽기 (공간감 극대화)
         int readIdx = (delayWriteIdx + 1) % DELAY_BUF_LEN;
         float echoL = delayLineL[readIdx];
         float echoR = delayLineR[readIdx];
@@ -593,139 +574,130 @@ void GetJudgmentWindows(float& purePerfect, float& perfect, float& maxWindow) {
 
 // ==========================================
 // 5. 악보(SongNote) -> 타일 각도 자동 컴파일러
-//    (음표의 박자 길이가 곧 타일 꺾임 각도가 되어 노래와 완벽 동기화!)
 // ==========================================
 std::vector<SongNote> GetWorldSongChart(int worldIdx) {
-    // { beatLen, turnDir, melodyMidi, chordRootMidi, drumType, swirl, midspin, checkpoint, speedMult }
-    // beatLen: 1.0f = 직진(1박), 0.5f = 90도 꺾임(반박), 0.75f = 45도 꺾임(0.75박), 2.0f = 유턴(2박)
     if (worldIdx == 0) {
-        // 1-X 불꽃의 춤: C minor 서정 멜로디 (G4 - Eb4 - F4 - G4 - C5 - Bb4 - G4...)
         return {
-            { 1.0f,  0, 67, 48, 1, false, false, false, 1.0f }, // G4 (Cm)
-            { 1.0f,  0, 63,  0, 3, false, false, false, 1.0f }, // Eb4
-            { 1.0f,  0, 65,  0, 2, false, false, false, 1.0f }, // F4
-            { 1.0f,  0, 67,  0, 3, false, false, false, 1.0f }, // G4
-            { 0.5f, -1, 72, 44, 1, false, false, false, 1.0f }, // C5 (Ab, 위 90도)
-            { 0.5f,  1, 70,  0, 3, false, false, false, 1.0f }, // Bb4 (오른쪽 90도)
-            { 0.5f, -1, 67,  0, 2, false, false, false, 1.0f }, // G4 (위 90도)
-            { 0.5f,  1, 65,  0, 3, false, false, false, 1.0f }, // F4 (오른쪽 90도)
-            { 1.0f,  0, 63, 46, 4, false, false, true,  1.0f }, // Eb4 (Bb, 체크포인트)
-            { 1.0f,  0, 62,  0, 3, false, false, false, 1.0f }, // D4
-            { 0.5f,  1, 63,  0, 2, false, false, false, 1.0f }, // Eb4 (아래 90도)
-            { 0.5f, -1, 65,  0, 3, false, false, false, 1.0f }, // F4 (오른쪽 90도)
-            { 0.5f,  1, 67, 43, 1, false, false, false, 1.0f }, // G4 (G, 아래 90도)
-            { 0.5f, -1, 70,  0, 3, false, false, false, 1.0f }, // Bb4 (오른쪽 90도)
-            { 1.0f,  0, 72, 48, 2, false, false, false, 1.0f }, // C5 (Cm)
-            { 1.0f,  0, 74,  0, 3, false, false, false, 1.0f }, // D5
-            { 1.0f,  0, 75,  0, 1, false, false, false, 1.0f }, // Eb5
-            { 1.0f,  0, 72, 48, 4, false, false, false, 1.0f }  // C5 (피날레)
+            { 1.0f,  0, 67, 48, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 63,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 65,  0, 2, false, false, false, 1.0f },
+            { 1.0f,  0, 67,  0, 3, false, false, false, 1.0f },
+            { 0.5f, -1, 72, 44, 1, false, false, false, 1.0f },
+            { 0.5f,  1, 70,  0, 3, false, false, false, 1.0f },
+            { 0.5f, -1, 67,  0, 2, false, false, false, 1.0f },
+            { 0.5f,  1, 65,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 63, 46, 4, false, false, true,  1.0f },
+            { 1.0f,  0, 62,  0, 3, false, false, false, 1.0f },
+            { 0.5f,  1, 63,  0, 2, false, false, false, 1.0f },
+            { 0.5f, -1, 65,  0, 3, false, false, false, 1.0f },
+            { 0.5f,  1, 67, 43, 1, false, false, false, 1.0f },
+            { 0.5f, -1, 70,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 72, 48, 2, false, false, false, 1.0f },
+            { 1.0f,  0, 74,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 75,  0, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 72, 48, 4, false, false, false, 1.0f }
         };
     }
     else if (worldIdx == 1) {
-        // 2-X 산들바람 사원: F minor 아르페지오 & 소용돌이 반전
         return {
-            { 1.0f,  0, 72, 53, 1, false, false, false, 1.0f }, // C5 (Fm)
-            { 1.0f,  0, 70,  0, 3, false, false, false, 1.0f }, // Bb4
-            { 0.5f, -1, 68,  0, 2, false, false, false, 1.0f }, // Ab4
-            { 0.5f, -1, 67, 49, 1, false, false, false, 1.0f }, // G4 (Db)
-            { 1.0f,  0, 68,  0, 3, false, false, false, 1.0f }, // Ab4
-            { 1.0f,  0, 70,  0, 2, false, false, false, 1.0f }, // Bb4
-            { 0.5f, -1, 72, 51, 1, false, false, false, 1.0f }, // C5 (Eb)
-            { 0.5f, -1, 75,  0, 3, false, false, false, 1.0f }, // Eb5
-            { 1.0f,  0, 73, 48, 4, false, false, true,  1.0f }, // Db5 (C, 체크포인트)
-            { 1.0f,  0, 72,  0, 1, true,  false, false, 1.0f }, // C5 (소용돌이 반전!)
-            { 1.0f,  0, 68, 53, 3, false, false, false, 1.0f }, // Ab4 (Fm)
-            { 0.5f,  1, 67,  0, 2, false, false, false, 1.0f }, // G4
-            { 0.5f,  1, 65,  0, 3, false, false, false, 1.0f }, // F4
-            { 1.0f,  0, 68, 49, 1, false, false, false, 1.0f }, // Ab4 (Db)
-            { 1.0f,  0, 72,  0, 2, false, false, false, 1.0f }, // C5
-            { 0.5f, -1, 75, 51, 1, false, false, false, 1.0f }, // Eb5 (Eb)
-            { 0.5f,  1, 77,  0, 3, false, false, false, 1.0f }, // F5
-            { 1.0f,  0, 75,  0, 2, false, false, false, 1.0f }, // Eb5
-            { 1.0f,  0, 72, 53, 4, false, false, false, 1.0f }  // C5
+            { 1.0f,  0, 72, 53, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 70,  0, 3, false, false, false, 1.0f },
+            { 0.5f, -1, 68,  0, 2, false, false, false, 1.0f },
+            { 0.5f, -1, 67, 49, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 68,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 70,  0, 2, false, false, false, 1.0f },
+            { 0.5f, -1, 72, 51, 1, false, false, false, 1.0f },
+            { 0.5f, -1, 75,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 73, 48, 4, false, false, true,  1.0f },
+            { 1.0f,  0, 72,  0, 1, true,  false, false, 1.0f },
+            { 1.0f,  0, 68, 53, 3, false, false, false, 1.0f },
+            { 0.5f,  1, 67,  0, 2, false, false, false, 1.0f },
+            { 0.5f,  1, 65,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 68, 49, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 72,  0, 2, false, false, false, 1.0f },
+            { 0.5f, -1, 75, 51, 1, false, false, false, 1.0f },
+            { 0.5f,  1, 77,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 75,  0, 2, false, false, false, 1.0f },
+            { 1.0f,  0, 72, 53, 4, false, false, false, 1.0f }
         };
     }
     else if (worldIdx == 2) {
-        // 3-X 달빛 언덕: A minor 45도 대각선 오르골 & 가속
         return {
-            { 1.0f,  0, 69, 45, 1, false, false, false, 1.0f }, // A4 (Am)
-            { 1.0f,  0, 72,  0, 3, false, false, false, 1.0f }, // C5
-            { 0.75f,-1, 76,  0, 2, false, false, false, 1.0f }, // E5 (45도 위)
-            { 0.75f, 0, 74, 41, 1, false, false, false, 1.0f }, // D5 (F)
-            { 0.75f, 1, 72,  0, 3, false, false, false, 1.18f }, // C5 (가속!)
-            { 0.75f, 1, 69,  0, 2, false, false, false, 1.18f }, // A4 (45도 아래)
-            { 0.75f, 0, 72, 48, 1, false, false, false, 1.18f }, // C5 (C)
-            { 0.75f,-1, 76,  0, 3, false, false, false, 1.0f }, // E5
-            { 1.0f,  0, 79, 43, 4, false, false, true,  1.0f }, // G5 (G, 체크포인트)
-            { 0.75f,-1, 76,  0, 3, false, false, false, 1.0f }, // E5
-            { 0.75f, 1, 74,  0, 2, false, false, false, 1.0f }, // D5
-            { 0.75f,-1, 72, 45, 1, false, false, false, 1.0f }, // C5 (Am)
-            { 0.75f, 1, 71,  0, 3, false, false, false, 1.0f }, // B4
-            { 1.0f,  0, 69,  0, 1, true,  false, false, 1.0f }, // A4 (소용돌이)
-            { 1.0f,  0, 72, 41, 2, false, false, false, 1.0f }, // C5 (F)
-            { 0.75f,-1, 76,  0, 3, false, false, false, 1.0f }, // E5
-            { 0.75f, 1, 74, 43, 1, false, false, false, 1.0f }, // D5 (G)
-            { 0.75f, 1, 71,  0, 2, false, false, false, 1.0f }, // B4
-            { 0.75f,-1, 69, 45, 1, false, false, false, 1.0f }, // A4 (Am)
-            { 1.0f,  0, 81, 45, 4, false, false, false, 1.0f }  // A5
+            { 1.0f,  0, 69, 45, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 72,  0, 3, false, false, false, 1.0f },
+            { 0.75f,-1, 76,  0, 2, false, false, false, 1.0f },
+            { 0.75f, 0, 74, 41, 1, false, false, false, 1.0f },
+            { 0.75f, 1, 72,  0, 3, false, false, false, 1.18f },
+            { 0.75f, 1, 69,  0, 2, false, false, false, 1.18f },
+            { 0.75f, 0, 72, 48, 1, false, false, false, 1.18f },
+            { 0.75f,-1, 76,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 79, 43, 4, false, false, true,  1.0f },
+            { 0.75f,-1, 76,  0, 3, false, false, false, 1.0f },
+            { 0.75f, 1, 74,  0, 2, false, false, false, 1.0f },
+            { 0.75f,-1, 72, 45, 1, false, false, false, 1.0f },
+            { 0.75f, 1, 71,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 69,  0, 1, true,  false, false, 1.0f },
+            { 1.0f,  0, 72, 41, 2, false, false, false, 1.0f },
+            { 0.75f,-1, 76,  0, 3, false, false, false, 1.0f },
+            { 0.75f, 1, 74, 43, 1, false, false, false, 1.0f },
+            { 0.75f, 1, 71,  0, 2, false, false, false, 1.0f },
+            { 0.75f,-1, 69, 45, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 81, 45, 4, false, false, false, 1.0f }
         };
     }
     else if (worldIdx == 3) {
-        // 4-X 달팽이 정원: D minor 감속/가속 나선 회랑
         return {
-            { 1.0f,  0, 74, 50, 1, false, false, false, 1.0f }, // D5 (Dm)
-            { 1.0f,  0, 70,  0, 3, false, false, false, 1.0f }, // Bb4
-            { 1.0f,  0, 72,  0, 2, false, false, false, 0.80f }, // C5 (달팽이 감속)
-            { 0.5f,  1, 74, 46, 1, false, false, false, 0.80f }, // D5 (Bb)
-            { 0.5f,  1, 77,  0, 3, false, false, false, 0.80f }, // F5
-            { 0.5f,  1, 74,  0, 2, false, false, false, 0.80f }, // D5
-            { 0.5f,  1, 72, 41, 1, false, false, false, 0.80f }, // C5 (F)
-            { 0.5f, -1, 70,  0, 3, false, false, false, 0.80f }, // Bb4
-            { 1.0f,  0, 69, 43, 1, true,  false, false, 1.15f }, // A4 (G, 소용돌이 + 토끼 가속!)
-            { 0.5f, -1, 70,  0, 3, false, false, false, 1.15f }, // Bb4
-            { 0.5f, -1, 72,  0, 2, false, false, false, 1.15f }, // C5
-            { 0.5f, -1, 74, 50, 1, false, false, false, 1.15f }, // D5 (Dm)
-            { 0.5f, -1, 77,  0, 3, false, false, false, 1.15f }, // F5
-            { 0.5f,  1, 76,  0, 2, false, false, false, 1.15f }, // E5
-            { 1.0f,  0, 74,  0, 1, false, false, false, 1.0f },  // D5 (원래 속도)
-            { 1.0f,  0, 72, 48, 4, false, false, true,  1.0f },  // C5 (C, 체크포인트)
-            { 1.0f,  0, 74,  0, 3, false, false, false, 1.0f },  // D5
-            { 0.5f, -1, 77, 46, 2, false, false, false, 1.0f },  // F5 (Bb)
-            { 0.5f,  1, 76,  0, 3, false, false, false, 1.0f },  // E5
-            { 0.5f,  1, 72, 43, 1, false, false, false, 1.0f },  // C5 (G)
-            { 0.5f, -1, 73,  0, 2, false, false, false, 1.0f },  // C#5
-            { 1.0f,  0, 74, 50, 1, false, false, false, 1.0f },  // D5 (Dm)
-            { 1.0f,  0, 74, 50, 4, false, false, false, 1.0f }   // D5
+            { 1.0f,  0, 74, 50, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 70,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 72,  0, 2, false, false, false, 0.80f },
+            { 0.5f,  1, 74, 46, 1, false, false, false, 0.80f },
+            { 0.5f,  1, 77,  0, 3, false, false, false, 0.80f },
+            { 0.5f,  1, 74,  0, 2, false, false, false, 0.80f },
+            { 0.5f,  1, 72, 41, 1, false, false, false, 0.80f },
+            { 0.5f, -1, 70,  0, 3, false, false, false, 0.80f },
+            { 1.0f,  0, 69, 43, 1, true,  false, false, 1.15f },
+            { 0.5f, -1, 70,  0, 3, false, false, false, 1.15f },
+            { 0.5f, -1, 72,  0, 2, false, false, false, 1.15f },
+            { 0.5f, -1, 74, 50, 1, false, false, false, 1.15f },
+            { 0.5f, -1, 77,  0, 3, false, false, false, 1.15f },
+            { 0.5f,  1, 76,  0, 2, false, false, false, 1.15f },
+            { 1.0f,  0, 74,  0, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 72, 48, 4, false, false, true,  1.0f },
+            { 1.0f,  0, 74,  0, 3, false, false, false, 1.0f },
+            { 0.5f, -1, 77, 46, 2, false, false, false, 1.0f },
+            { 0.5f,  1, 76,  0, 3, false, false, false, 1.0f },
+            { 0.5f,  1, 72, 43, 1, false, false, false, 1.0f },
+            { 0.5f, -1, 73,  0, 2, false, false, false, 1.0f },
+            { 1.0f,  0, 74, 50, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 74, 50, 4, false, false, false, 1.0f }
         };
     }
     else if (worldIdx == 4) {
-        // 5-X 부메랑 회랑: 2.0f(2박) 긴 음표로 180도 유턴 반환점 표현!
         return {
-            { 1.0f,  0, 72, 48, 1, false, false, false, 1.0f }, // C5 (Cm)
-            { 1.0f,  0, 75,  0, 3, false, false, false, 1.0f }, // Eb5
-            { 1.0f,  0, 79,  0, 2, false, false, false, 1.0f }, // G5
-            { 2.0f,  2, 84, 44, 4, false, false, false, 1.0f }, // C6 (Ab, 2박 긴 음표 + 180도 유턴!)
-            { 1.0f,  0, 79,  0, 3, false, false, false, 1.0f }, // G5
-            { 0.5f, -1, 77, 46, 2, false, false, false, 1.0f }, // F5 (Bb)
-            { 0.5f,  1, 75,  0, 3, false, false, false, 1.0f }, // Eb5
-            { 1.0f,  0, 74,  0, 1, false, false, false, 1.0f }, // D5
-            { 1.0f,  0, 75, 48, 4, false, false, true,  1.0f }, // Eb5 (Cm, 체크포인트)
-            { 0.75f, 1, 72,  0, 3, false, false, false, 1.0f }, // C5
-            { 0.75f, 0, 75, 41, 1, false, false, false, 1.16f }, // Eb5 (Fm, 가속)
-            { 2.0f,  2, 80,  0, 4, false, false, false, 1.16f }, // Ab5 (2박 긴 음표 + 180도 유턴!)
-            { 1.0f,  0, 79, 43, 2, false, false, false, 1.0f }, // G5 (G)
-            { 0.75f, 1, 77,  0, 3, true,  false, false, 1.0f }, // F5 (소용돌이)
-            { 1.0f,  0, 75,  0, 1, false, false, false, 1.0f }, // Eb5
-            { 0.5f,  1, 74, 48, 2, false, false, false, 1.0f }, // D5 (Cm)
-            { 0.5f, -1, 72,  0, 3, false, false, false, 1.0f }, // C5
-            { 0.5f, -1, 74,  0, 2, false, false, false, 1.0f }, // D5
-            { 0.5f,  1, 75,  0, 3, false, false, false, 1.0f }, // Eb5
-            { 1.0f,  0, 79, 48, 4, false, false, false, 1.0f }  // G5
+            { 1.0f,  0, 72, 48, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 75,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 79,  0, 2, false, false, false, 1.0f },
+            { 2.0f,  2, 84, 44, 4, false, false, false, 1.0f },
+            { 1.0f,  0, 79,  0, 3, false, false, false, 1.0f },
+            { 0.5f, -1, 77, 46, 2, false, false, false, 1.0f },
+            { 0.5f,  1, 75,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 74,  0, 1, false, false, false, 1.0f },
+            { 1.0f,  0, 75, 48, 4, false, false, true,  1.0f },
+            { 0.75f, 1, 72,  0, 3, false, false, false, 1.0f },
+            { 0.75f, 0, 75, 41, 1, false, false, false, 1.16f },
+            { 2.0f,  2, 80,  0, 4, false, false, false, 1.16f },
+            { 1.0f,  0, 79, 43, 2, false, false, false, 1.0f },
+            { 0.75f, 1, 77,  0, 3, true,  false, false, 1.0f },
+            { 1.0f,  0, 75,  0, 1, false, false, false, 1.0f },
+            { 0.5f,  1, 74, 48, 2, false, false, false, 1.0f },
+            { 0.5f, -1, 72,  0, 3, false, false, false, 1.0f },
+            { 0.5f, -1, 74,  0, 2, false, false, false, 1.0f },
+            { 0.5f,  1, 75,  0, 3, false, false, false, 1.0f },
+            { 1.0f,  0, 79, 48, 4, false, false, false, 1.0f }
         };
     }
     else {
-        // 6-X ~ 12-X: 월드별 고유 스케일, 미드스핀 2연타, 소용돌이, 변속 악보 생성
-        int scaleOffsets[7] = { 0, 2, 3, 5, 7, 8, 10 }; // 자연단음계
+        int scaleOffsets[7] = { 0, 2, 3, 5, 7, 8, 10 };
         int baseRoots[6] = { 51, 52, 45, 50, 48, 52 };
         int rBase = baseRoots[(worldIdx - 5) % 6];
         int prog[4] = { rBase, rBase - 4, rBase - 7, rBase - 5 };
@@ -734,20 +706,16 @@ std::vector<SongNote> GetWorldSongChart(int worldIdx) {
         int noteIdx = 0;
         for (int bar = 0; bar < 4; bar++) {
             int cRoot = prog[bar];
-            // 마디 첫 박
             chart.push_back({ 1.0f, 0, cRoot + 24 + scaleOffsets[noteIdx % 7], cRoot, (bar == 2 ? 4 : 1), false, false, (bar == 2), 1.0f });
             noteIdx++;
 
-            // 45도 대각선 리프
             chart.push_back({ 0.75f, -1, cRoot + 24 + scaleOffsets[(noteIdx + 2) % 7], 0, 3, false, false, false, 1.0f });
             chart.push_back({ 0.75f,  1, cRoot + 24 + scaleOffsets[(noteIdx + 4) % 7], 0, 2, (bar == 1), false, false, (bar == 1 ? 1.15f : 1.0f) });
             noteIdx += 2;
 
-            // 삼각 미드스핀 2연타 (빠른 멜로디 꾸밈음!)
             chart.push_back({ 0.5f,  1, cRoot + 31, 0, 1, false, true,  false, (bar == 1 ? 1.15f : 1.0f) });
             chart.push_back({ 0.5f, -1, cRoot + 29, 0, 3, false, false, false, 1.0f });
 
-            // 마디 마무리 (홀수 마디 끝에서 부메랑 유턴 또는 90도 꺾임)
             if (bar == 1 && worldIdx >= 8) {
                 chart.push_back({ 2.0f, 2, cRoot + 36, 0, 4, false, false, false, 1.0f });
             } else {
@@ -760,11 +728,9 @@ std::vector<SongNote> GetWorldSongChart(int worldIdx) {
     }
 }
 
-// 악보의 beatLen으로부터 정확한 타일 진행 각도(enterAngleDeg)를 계산하여 길 생성!
 void BuildTilesFromSongChart(const std::vector<SongNote>& songNotes, bool addLeadIn) {
     tiles.clear();
 
-    // 원작 ADOFAI와 동일한 전주 4박자 타일(Lead-in)
     std::vector<SongNote> fullChart;
     if (addLeadIn) {
         int introRoot = (!songNotes.empty() && songNotes[0].chordRootMidi > 0) ? songNotes[0].chordRootMidi : 48;
@@ -781,15 +747,13 @@ void BuildTilesFromSongChart(const std::vector<SongNote>& songNotes, bool addLea
     tiles.push_back({ curPos, 0.0f, 0.0f, 1.0f, -1, 0, 1, addLeadIn, false, false, false, 1.0f, true, 0.0f });
 
     Vector2 buildPivot = curPos;
-    bool simCw = true;
 
     for (size_t i = 0; i < fullChart.size(); i++) {
         const SongNote& note = fullChart[i];
 
-        // 1.0f = 직진(0도 변화), 0.5f = 90도 꺾임, 0.75f = 45도 꺾임, 2.0f = 180도 유턴!
         float deltaDeg = 0.0f;
         if (note.turnDir == 2) {
-            deltaDeg = 180.0f; // 2박 유턴
+            deltaDeg = 180.0f;
         } else if (note.turnDir != 0) {
             float bend = (1.0f - note.beatLen) * 180.0f;
             deltaDeg = note.turnDir * bend;
@@ -820,13 +784,11 @@ void BuildTilesFromSongChart(const std::vector<SongNote>& songNotes, bool addLea
             0.0f
         });
 
-        if (note.swirl) simCw = !simCw;
         if (!note.midspin) {
             buildPivot = nextPos;
         }
     }
 
-    // 각 타일의 진출 방향(exitAngleDeg) 업데이트
     for (size_t i = 0; i + 1 < tiles.size(); i++) {
         tiles[i].exitAngleDeg = tiles[i + 1].enterAngleDeg;
     }
@@ -1164,7 +1126,7 @@ void DrawSingleAdofaiTile(size_t i, float timeNow, int remainingVisits, bool isF
                    Vector2Subtract(edgeStart, Vector2Scale(perpIn, wSlab * 0.48f)),
                    2.2f, Fade(BLACK, 0.52f * fog));
 
-        DrawCircleLinesV(tiles[i].pos, 8.5f * scale, Fade(borderCol, 0.45f * fog));
+        DrawCircleLines((int)tiles[i].pos.x, (int)tiles[i].pos.y, 8.5f * scale, Fade(borderCol, 0.45f * fog));
         DrawCircleV(tiles[i].pos, 3.5f * scale, Fade(borderCol, 0.85f * fog));
     }
 
@@ -1172,7 +1134,7 @@ void DrawSingleAdofaiTile(size_t i, float timeNow, int remainingVisits, bool isF
         Color targetCol = isFirePivot ? Color{ 75, 228, 255, 255 } : Color{ 255, 148, 60, 255 };
         float pulse = 22.0f + 4.5f * sinf(timeNow * 11.0f);
         DrawCircleV(tiles[i].pos, 14.0f, Fade(targetCol, 0.25f));
-        DrawCircleLinesV(tiles[i].pos, pulse, Fade(targetCol, 0.92f));
+        DrawCircleLines((int)tiles[i].pos.x, (int)tiles[i].pos.y, pulse, Fade(targetCol, 0.92f));
 
         if (!isGoal) {
             float outRad = outDeg * DEG2RAD;
@@ -1210,13 +1172,13 @@ void DrawSingleAdofaiTile(size_t i, float timeNow, int remainingVisits, bool isF
     }
 
     if (tiles[i].checkpoint && currentMode == MODE_JOURNEY) {
-        DrawCircleLinesV(tiles[i].pos, 23.0f, Fade(GREEN, fog));
+        DrawCircleLines((int)tiles[i].pos.x, (int)tiles[i].pos.y, 23.0f, Fade(GREEN, fog));
     }
 
     if (remainingVisits >= 2 && (isFirstStackHolder || isNextTarget)) {
         Rectangle badge = { tiles[i].pos.x + 14.0f, tiles[i].pos.y - 34.0f, 36.0f, 21.0f };
-        DrawRectangleRounded(badge, 0.45f, 6, GOLD);
-        DrawRectangleRoundedLinesEx(badge, 0.45f, 6, 1.5f, BLACK);
+        DrawRectangleRounded(badge, 0.45f, 6, BLACK);
+        DrawRectangleRounded({ badge.x + 1.5f, badge.y + 1.5f, badge.width - 3.0f, badge.height - 3.0f }, 0.45f, 6, GOLD);
         DrawTextCentered(TextFormat("x%d", remainingVisits), badge.x + 18.0f, badge.y + 2.0f, 14.5f, BLACK, false);
     }
 }
@@ -1362,7 +1324,6 @@ void StartGame(int startFromTile = 0) {
 
     SetupOrbitForTile(startFromTile, prevPiv);
 
-    // 출발 타일의 첫 화음과 음표 즉시 연주!
     int preset = (currentMode == MODE_ENDLESS) ? 2 : worlds[selectedWorld].synthPreset;
     PlayNoteForTile(tiles[startFromTile], preset, true);
     cameraBeatPulse = 0.045f;
@@ -1387,7 +1348,6 @@ void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
     tiles[currentTile].cleared = true;
     tiles[currentTile].hitAnim = 1.0f;
 
-    // 바로 이 타일에 배정된 멜로디 음정 + 화음 + 드럼을 정박에 연주!
     int preset = (currentMode == MODE_ENDLESS) ? 2 : worlds[selectedWorld].synthPreset;
     PlayNoteForTile(tiles[currentTile], preset, true);
 
@@ -1881,7 +1841,7 @@ void UpdateAndDrawFrame() {
 
         DrawAdofaiTrack(timeNow);
 
-        DrawCircleLinesV(pivotPos, TILE_STEP, Fade(WHITE, 0.16f));
+        DrawCircleLines((int)pivotPos.x, (int)pivotPos.y, TILE_STEP, Fade(WHITE, 0.16f));
         if (screen == SCR_PLAYING && currentTile + 1 < (int)tiles.size()) {
             float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
             float startDeg = currentAngle * RAD2DEG;
@@ -1890,7 +1850,7 @@ void UpdateAndDrawFrame() {
             DrawRing(pivotPos, TILE_STEP - 3.5f, TILE_STEP + 2.0f, startDeg, endDeg, 24, Fade(arcCol, 0.42f));
 
             Vector2 nextPos = tiles[currentTile + 1].pos;
-            DrawCircleLinesV(nextPos, PLANET_RADIUS + 4.0f * sinf(timeNow * 12.0f), Fade(arcCol, 0.65f));
+            DrawCircleLines((int)nextPos.x, (int)nextPos.y, PLANET_RADIUS + 4.0f * sinf(timeNow * 12.0f), Fade(arcCol, 0.65f));
         }
 
         for (const auto& sw : shockwaves) {
@@ -1917,12 +1877,12 @@ void UpdateAndDrawFrame() {
         }
 
         DrawCircleV(firePos, PLANET_RADIUS + 10.0f, Fade(ORANGE, 0.28f));
-        DrawCircleLinesV(firePos, PLANET_RADIUS + 3.0f, Fade(GOLD, 0.65f));
+        DrawCircleLines((int)firePos.x, (int)firePos.y, PLANET_RADIUS + 3.0f, Fade(GOLD, 0.65f));
         DrawCircleV(firePos, PLANET_RADIUS, { 255, 62, 42, 255 });
         DrawCircleV(firePos, PLANET_RADIUS * 0.48f, { 255, 228, 168, 255 });
 
         DrawCircleV(icePos, PLANET_RADIUS + 10.0f, Fade(SKYBLUE, 0.28f));
-        DrawCircleLinesV(icePos, PLANET_RADIUS + 3.0f, Fade(WHITE, 0.65f));
+        DrawCircleLines((int)icePos.x, (int)icePos.y, PLANET_RADIUS + 3.0f, Fade(WHITE, 0.65f));
         DrawCircleV(icePos, PLANET_RADIUS, { 42, 198, 255, 255 });
         DrawCircleV(icePos, PLANET_RADIUS * 0.48f, { 228, 250, 255, 255 });
 
