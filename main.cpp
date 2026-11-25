@@ -47,6 +47,7 @@ struct Tile {
     bool swirl = false;
     bool midspin = false;
     bool checkpoint = false;
+    float speedMult = 1.0f; // 1.0f = 기본, >1.0f = 토끼(가속), <1.0f = 달팽이(감속)
     bool cleared = false;
     float hitAnim = 0.0f;
 };
@@ -56,6 +57,7 @@ struct MapStep {
     bool swirl = false;
     bool midspin = false;
     bool checkpoint = false;
+    float speedMult = 1.0f;
 };
 
 struct TrailPoint {
@@ -136,7 +138,7 @@ const float NOTE_FREQS[18] = {
 WorldInfo worlds[WORLD_COUNT] = {
     {
         "첫 번째 불꽃", "입문 1", "오르골 발라드",
-        "직진과 90도 계단으로 박자를 익히는 기초 산책로",
+        "직진과 90도 계단으로 리듬감을 익히는 기초 코스",
         92.0f, 1, 24.0f,
         { 3, 7, 10, 12, 10, 7, 5, 10 },
         { 3, 8, 3, 10 }, 0, false, 0.0f
@@ -150,56 +152,56 @@ WorldInfo worlds[WORLD_COUNT] = {
     },
     {
         "산들바람 언덕", "초급 1", "맑은 겨울 차임",
-        "45도 완만한 오르막·내리막 능선을 넘는 경쾌한 코스",
+        "45도 완만한 오르막·내리막 능선과 첫 가속(토끼) 타일",
         104.0f, 3, 195.0f,
         { 12, 15, 17, 14, 15, 12, 10, 7 },
         { 0, 8, 3, 10 }, 2, false, 0.0f
     },
     {
         "달팽이 정원", "초급 2", "따뜻한 오르골 하모니",
-        "안으로 감겼다가 반전으로 빠져나오는 달팽이 나선",
+        "감속(달팽이)과 가속(토끼)이 교차하는 나선형 정원",
         110.0f, 4, 130.0f,
         { 5, 8, 10, 12, 15, 12, 10, 8 },
         { 5, 0, 8, 10 }, 0, false, 0.0f
     },
     {
         "쌍둥이 부메랑", "중급 1", "천상의 하프 아르페지오",
-        "길 끝에서 180도 되돌아오는 왕복 부메랑 코스",
+        "길 끝에서 180도 되돌아오는 왕복 유턴 부메랑",
         116.0f, 5, 42.0f,
         { 5, 8, 12, 15, 14, 10, 12, 8 },
         { 5, 10, 1, 0 }, 3, false, 0.0f
     },
     {
         "별빛 다이아몬드", "중급 2", "몽환적 첼레스타 선율",
-        "반짝이는 마름모 광장과 첫 삼각 미드스핀(왈츠 박자)",
+        "마름모 광장과 첫 삼각 미드스핀(3박자 왈츠 스텝)",
         122.0f, 6, 248.0f,
         { 7, 10, 14, 15, 14, 10, 7, 10 },
         { 7, 3, 8, 10 }, 2, false, 0.0f
     },
     {
         "벌집의 춤", "상급 1", "레트로 신스웨이브 리프",
-        "60도·120도 육각형 벌집 테두리를 도는 리듬 코스",
+        "60도·120도 육각형 벌집 테두리와 변속 리듬",
         128.0f, 7, 54.0f,
         { 7, 8, 11, 14, 15, 14, 11, 8 },
         { 7, 8, 5, 7 }, 4, false, 0.0f
     },
     {
         "모래시계 회랑", "상급 2", "깊은 일렉트로닉 펄스",
-        "대각선이 교차하는 모래시계 모양과 연속 방향 반전",
+        "대각선이 교차하는 모래시계와 연속 방향 반전",
         135.0f, 8, 285.0f,
         { 0, 3, 7, 10, 12, 10, 7, 3 },
         { 0, 5, 7, 0 }, 1, false, 0.0f
     },
     {
         "왕관의 성채", "도전 1", "웅장한 파이프 오르간",
-        "뾰족한 왕관 능선을 따라 이어지는 미드스핀 콤보",
+        "뾰족한 왕관 능선을 따라 이어지는 미드스핀 연타",
         142.0f, 9, 340.0f,
         { 3, 6, 10, 11, 10, 6, 5, 2 },
         { 3, 11, 8, 10 }, 5, false, 0.0f
     },
     {
         "무지개 피날레", "도전 2", "축제 심포니 오르간",
-        "1~9월드의 모든 기믹이 어우러지는 신나는 대단원",
+        "소용돌이·미드스핀·변속이 모두 어우러지는 대단원",
         150.0f, 10, 315.0f,
         { 3, 7, 10, 15, 14, 10, 12, 15 },
         { 3, 10, 8, 10 }, 5, false, 0.0f
@@ -226,16 +228,18 @@ int bestEndlessScore = 0;
 bool isFirePivot = true;
 bool cw = true;
 
+float baseBpm = 92.0f;
 float currentBpm = 92.0f;
 float currentAngle = 0.0f;
 float targetDiff = PI;
 float traveledAngle = 0.0f;
 
-int countdownBeats = 4;
+int countdownBeats = 5;
 float beatTimer = 0.0f;
 int totalBeatCount = 0;
 float cameraBeatPulse = 0.0f;
 float screenShake = 0.0f;
+float overloadFlash = 0.0f;
 float gameOverTimer = 0.0f;
 float bgHue = 24.0f;
 
@@ -253,6 +257,8 @@ Sound sndKick;
 Sound sndSnare;
 Sound sndHat;
 Sound sndSwirl;
+Sound sndSpeedUp;
+Sound sndSlowDown;
 Sound sndFail;
 Sound sndClear;
 Sound sndMelody[6][18];
@@ -280,9 +286,9 @@ Font LoadKoreanFont(const char* path, int fontSize) {
         "단 한 번의 실수나 어긋남도 허용되지 않는 고수용 모드입니다 최고 기록 타일 "
         "클릭 또는 방향키로 선택 판정 쉬움 보통 엄격 오토플레이 켜짐 꺼짐 싱크 조작 "
         "모드 선택 코스 모양 미리보기 월드 시작 난이도 음악 고정 코스 상태 클리어 완료 최고 정확도 "
-        "아직 클리어하지 않음 진행률 연속 메뉴 빠름 느림 완벽 너무 체크포인트 놓침 준비 "
+        "아직 클리어하지 않음 진행률 연속 메뉴 빠름 느림 완벽 너무 체크포인트 놓침 준비 시작 "
         "행성 파괴 퍼펙트 챌린지 완벽하지 않은 타이밍 일찍 입력했습니다 과부하 놓쳤습니다 "
-        "생존 기록 부활 처음부터 다시 도전 최종 판정 다음 겹침";
+        "생존 기록 부활 처음부터 다시 도전 최종 판정 다음 가속 감속";
 
     int cpCount = 0;
     int* rawCps = LoadCodepoints(allChars.c_str(), &cpCount);
@@ -367,6 +373,16 @@ Sound SynthSFX(int type, float freq, float duration, float volume) {
             float env = expf(-t * 10.5f);
             float f = freq + (duration > 0.25f ? -freq * 0.65f * (t / duration) : freq * 0.55f * (t / duration));
             sample = (sinf(2.0f * PI * f * t) + 0.28f * sinf(4.0f * PI * f * t)) * env;
+        } else if (type == 4) {
+            // 상승 챠임 (토끼 가속)
+            float env = expf(-t * 12.0f);
+            float f = freq * (1.0f + 0.8f * (t / duration));
+            sample = (sinf(2.0f * PI * f * t) * 0.7f + sinf(4.0f * PI * f * t) * 0.3f) * env;
+        } else if (type == 5) {
+            // 하강 챠임 (달팽이 감속)
+            float env = expf(-t * 10.0f);
+            float f = freq * (1.0f - 0.45f * (t / duration));
+            sample = sinf(2.0f * PI * f * t) * env;
         }
 
         sample = Clamp(sample, -1.0f, 1.0f);
@@ -429,13 +445,15 @@ Sound SynthInstrumentNote(int inst, float freq, float duration, float volume) {
 void EnsureAudioInitialized() {
     if (audioReady) return;
     InitAudioDevice();
-    sndHit   = SynthSFX(0, 587.33f, 0.10f, 0.72f);
-    sndKick  = SynthSFX(1, 152.00f, 0.17f, 0.60f);
-    sndSnare = SynthSFX(2, 400.00f, 0.13f, 0.32f);
-    sndHat   = SynthSFX(2, 2600.0f, 0.045f, 0.18f);
-    sndSwirl = SynthSFX(3, 440.00f, 0.14f, 0.45f);
-    sndFail  = SynthSFX(3, 155.00f, 0.40f, 0.78f);
-    sndClear = SynthSFX(0, 880.00f, 0.45f, 0.78f);
+    sndHit      = SynthSFX(0, 587.33f, 0.10f, 0.72f);
+    sndKick     = SynthSFX(1, 152.00f, 0.17f, 0.60f);
+    sndSnare    = SynthSFX(2, 400.00f, 0.13f, 0.32f);
+    sndHat      = SynthSFX(2, 2600.0f, 0.045f, 0.18f);
+    sndSwirl    = SynthSFX(3, 440.00f, 0.14f, 0.45f);
+    sndSpeedUp  = SynthSFX(4, 523.25f, 0.16f, 0.48f);
+    sndSlowDown = SynthSFX(5, 440.00f, 0.18f, 0.48f);
+    sndFail     = SynthSFX(3, 155.00f, 0.40f, 0.78f);
+    sndClear    = SynthSFX(0, 880.00f, 0.45f, 0.78f);
 
     for (int inst = 0; inst < 6; inst++) {
         for (int n = 0; n < 18; n++) {
@@ -449,11 +467,11 @@ void EnsureAudioInitialized() {
 }
 
 // ==========================================
-// 5. 10개 테마 월드 코스 생성기 (점진적 난이도 + 다채로운 코스)
+// 5. 10개 테마 월드 코스 생성기 (진짜 얼불춤 기믹 포함)
 // ==========================================
 std::vector<MapStep> GetWorldSteps(int worldIdx) {
     if (worldIdx == 0) {
-        // 1월드: 첫 번째 불꽃 (직선과 90도 계단 기초)
+        // 1월드: 첫 번째 불꽃 (기초 직선 + 90도 계단)
         return {
             {0}, {0}, {0}, {0},
             {-90}, {0}, {-90}, {0},
@@ -471,21 +489,21 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
         };
     }
     else if (worldIdx == 2) {
-        // 3월드: 산들바람 언덕 (45도 완만한 오르막·내리막 능선)
+        // 3월드: 산들바람 언덕 (45도 능선 + 첫 토끼 가속 타일)
         return {
-            {0}, {0}, {-45}, {-45}, {0}, {45}, {45}, {0},
+            {0}, {0}, {-45}, {-45}, {0, false, false, false, 1.25f}, {45}, {45}, {0, false, false, false, 1.0f},
             {0, false, false, true},
             {-45}, {45}, {-45}, {45},
             {0, true}, {0}, {-45}, {0}, {45}, {0}, {0}
         };
     }
     else if (worldIdx == 3) {
-        // 4월드: 달팽이 정원 (나선형 회전 + 방향 반전 탈출)
+        // 4월드: 달팽이 정원 (달팽이 감속 + 나선 회전 + 토끼 가속 탈출)
         return {
-            {0}, {0}, {0},
+            {0}, {0}, {0, false, false, false, 0.80f},
             {90}, {90}, {180}, {180}, {-90},
-            {0, true},
-            {-90}, {180}, {180}, {90}, {90}, {0},
+            {0, true, false, false, 1.15f},
+            {-90}, {180}, {180}, {90}, {90}, {0, false, false, false, 1.0f},
             {0, false, false, true},
             {0}, {-90}, {0}, {90}, {0}, {0}, {0}
         };
@@ -496,7 +514,7 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
             {0}, {0}, {0}, {180}, {180},
             {-90}, {0}, {0},
             {0, false, false, true},
-            {45}, {45}, {-135}, {-135},
+            {45}, {45, false, false, false, 1.20f}, {-135}, {-135, false, false, false, 1.0f},
             {0, true}, {0}, {90}, {0}, {-90}, {0}, {0}
         };
     }
@@ -512,12 +530,12 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
         };
     }
     else if (worldIdx == 6) {
-        // 7월드: 벌집의 춤 (60도·120도 육각형 벌집 테두리)
+        // 7월드: 벌집의 춤 (60도·120도 육각형 벌집 테두리 + 변속)
         return {
-            {0}, {-60}, {0}, {60}, {120}, {60}, {0},
+            {0}, {-60}, {0}, {60, false, false, false, 1.20f}, {120}, {60}, {0, false, false, false, 1.0f},
             {0, false, false, true},
             {0, true},
-            {60}, {0}, {-60}, {-120}, {-60}, {0},
+            {60}, {0}, {-60, false, false, false, 0.85f}, {-120}, {-60}, {0, false, false, false, 1.0f},
             {-60}, {60}, {-60}, {60}, {0}, {0}
         };
     }
@@ -527,32 +545,32 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
             {0}, {-45}, {-45}, {90}, {45}, {45},
             {0, false, false, true},
             {0, true}, {-90, true}, {0, true}, {90, true},
-            {-45}, {45}, {135}, {-135},
+            {-45, false, false, false, 1.22f}, {45}, {135}, {-135, false, false, false, 1.0f},
             {0, true}, {0}, {-45}, {45}, {0}, {0}
         };
     }
     else if (worldIdx == 8) {
-        // 9월드: 왕관의 성채 (왕관 톱니 능선 + 미드스핀 콤보)
+        // 9월드: 왕관의 성채 (왕관 톱니 능선 + 미드스핀 연타)
         return {
             {0}, {-45}, {45}, {-90}, {90}, {-45}, {45}, {0},
             {0, false, false, true},
             {90, false, true}, {0}, {90, false, true}, {0},
-            {0, true},
-            {-45}, {45}, {-45}, {45},
+            {0, true, false, false, 1.18f},
+            {-45}, {45}, {-45}, {45, false, false, false, 1.0f},
             {-90, false, true}, {0}, {-90, false, true}, {0},
             {0, true}, {0}, {0}, {0}
         };
     }
     else {
-        // 10월드: 무지개 피날레 (1~9월드 핵심 기믹 총정리 축제 코스)
+        // 10월드: 무지개 피날레 (모든 기믹과 변속이 어우러지는 대단원)
         return {
             {0}, {0}, {-90}, {0}, {90}, {0},
-            {90}, {180}, {-90}, {0},
+            {90, false, false, false, 0.85f}, {180}, {-90}, {0, false, false, false, 1.0f},
             {0, false, false, true},
             {0, true}, {-45}, {45}, {-45}, {45}, {0},
             {-90, false, true}, {0}, {-90, false, true}, {0},
             {0, false, false, true},
-            {0, true}, {60}, {0}, {-60}, {0}, {180}, {0},
+            {0, true, false, false, 1.22f}, {60}, {0}, {-60}, {0}, {180, false, false, false, 1.0f}, {0},
             {90, false, true}, {0}, {0}, {0}
         };
     }
@@ -561,7 +579,7 @@ std::vector<MapStep> GetWorldSteps(int worldIdx) {
 void BuildTilesFromSteps(const std::vector<MapStep>& steps) {
     tiles.clear();
     Vector2 curPos = { 0.0f, 0.0f };
-    tiles.push_back({ curPos, false, false, false, true, 0.0f });
+    tiles.push_back({ curPos, false, false, false, 1.0f, true, 0.0f });
 
     Vector2 buildPivot = curPos;
     for (size_t i = 0; i < steps.size(); i++) {
@@ -575,6 +593,7 @@ void BuildTilesFromSteps(const std::vector<MapStep>& steps) {
             steps[i].swirl,
             steps[i].midspin,
             steps[i].checkpoint,
+            steps[i].speedMult,
             false,
             0.0f
         });
@@ -618,23 +637,27 @@ void AppendEndlessTiles(int count) {
     for (int i = 0; i < count; i++) {
         float deg = angles[GetRandomValue(0, 5)];
         bool swirl = (GetRandomValue(0, 7) == 0);
-        float rad = deg * DEG2RAD;
+        float spMult = 1.0f;
+        int rSp = GetRandomValue(0, 14);
+        if (rSp == 0) spMult = 1.22f;
+        else if (rSp == 1) spMult = 0.85f;
 
+        float rad = deg * DEG2RAD;
         Vector2 nextPos = {
             endlessBuildPivot.x + cosf(rad) * TILE_DIST,
             endlessBuildPivot.y + sinf(rad) * TILE_DIST
         };
-        tiles.push_back({ nextPos, swirl, false, false, false, 0.0f });
+        tiles.push_back({ nextPos, swirl, false, false, spMult, false, 0.0f });
         endlessBuildPivot = nextPos;
     }
 }
 
 // ==========================================
-// 6. 이펙트, 겹침 시각화 헬퍼 및 공전 궤도 제어
+// 6. 진짜 얼불춤 스타일 타일 · 이펙트 · 궤도 제어
 // ==========================================
 void InitAmbientMotes() {
     motes.clear();
-    for (int i = 0; i < 45; i++) {
+    for (int i = 0; i < 48; i++) {
         motes.push_back({
             { (float)GetRandomValue(0, SCREEN_WIDTH), (float)GetRandomValue(0, SCREEN_HEIGHT) },
             { (float)GetRandomValue(-16, 16), (float)GetRandomValue(-26, -8) },
@@ -661,14 +684,31 @@ void SpawnHitParticles(Vector2 pos, Color col, int count) {
 }
 
 void SpawnShockwave(Vector2 pos, Color col, float maxRad = 85.0f) {
-    shockwaves.push_back({ pos, col, 18.0f, maxRad, 0.85f });
+    shockwaves.push_back({ pos, col, 18.0f, maxRad, 0.88f });
 }
 
 void AddPopup(const std::string& msg, Vector2 pos, Color col) {
-    popups.push_back({ msg, { pos.x, pos.y - 44.0f }, col, 0.75f });
+    popups.push_back({ msg, { pos.x, pos.y - 46.0f }, col, 0.78f });
 }
 
 void SetupOrbitForTile(int index, Vector2 prevPivotPos) {
+    // 속도 변경 타일 적용 (토끼 / 달팽이)
+    if (tiles[index].speedMult != 1.0f) {
+        float prevBpm = currentBpm;
+        currentBpm = baseBpm * tiles[index].speedMult;
+        if (screen == SCR_PLAYING && fabsf(currentBpm - prevBpm) > 1.0f) {
+            if (tiles[index].speedMult > 1.0f) {
+                AddPopup("가속!", tiles[index].pos, ORANGE);
+                SpawnShockwave(tiles[index].pos, ORANGE, 100.0f);
+                if (audioReady) PlaySound(sndSpeedUp);
+            } else {
+                AddPopup("감속", tiles[index].pos, SKYBLUE);
+                SpawnShockwave(tiles[index].pos, SKYBLUE, 100.0f);
+                if (audioReady) PlaySound(sndSlowDown);
+            }
+        }
+    }
+
     if (tiles[index].midspin) {
         Vector2 currTarget = tiles[index].pos;
         Vector2 nextTarget = tiles[index + 1].pos;
@@ -727,7 +767,62 @@ void DrawDashedGlowLine(Vector2 p1, Vector2 p2, Color col) {
     }
 }
 
-void DrawSingleTile(size_t i, float timeNow, int remainingStackCount, bool isFirstStackHolder, bool isUTurnTile) {
+// 진짜 얼불춤의 각진 사각 도로 세그먼트 렌더링
+void DrawAdofaiRoadSegment(Vector2 p1, Vector2 p2, bool cleared, bool isActive, bool isFireActive, float timeNow) {
+    Vector2 diff = Vector2Subtract(p2, p1);
+    float len = Vector2Length(diff);
+    if (len < 1.0f) return;
+    float deg = atan2f(diff.y, diff.x) * RAD2DEG;
+
+    float outerThick = isActive ? 54.0f : 50.0f;
+    float innerThick = isActive ? 42.0f : 38.0f;
+
+    Color borderCol = isActive ? (isFireActive ? SKYBLUE : ORANGE) :
+                      cleared  ? Color{ 105, 148, 215, 220 } : Color{ 68, 86, 130, 240 };
+    Color coreCol   = isActive ? Color{ 44, 62, 98, 255 } :
+                      cleared  ? Color{ 34, 50, 82, 230 } : Color{ 23, 30, 48, 248 };
+
+    // 그림자
+    Rectangle shadowRec = { p1.x, p1.y + 7.0f, len, outerThick };
+    DrawRectanglePro(shadowRec, { 0.0f, outerThick * 0.5f }, deg, Fade(BLACK, 0.35f));
+
+    // 외곽 네온 테두리
+    Rectangle outerRec = { p1.x, p1.y, len, outerThick };
+    DrawRectanglePro(outerRec, { 0.0f, outerThick * 0.5f }, deg, borderCol);
+
+    // 내부 타일 바닥
+    Rectangle innerRec = { p1.x, p1.y, len, innerThick };
+    DrawRectanglePro(innerRec, { 0.0f, innerThick * 0.5f }, deg, coreCol);
+
+    // 중앙 미세 레일 라인
+    Rectangle centerLine = { p1.x, p1.y, len, 3.0f };
+    DrawRectanglePro(centerLine, { 0.0f, 1.5f }, deg, Fade(WHITE, isActive ? 0.35f : 0.10f));
+
+    if (isActive) {
+        float pulse = 0.25f + 0.15f * sinf(timeNow * 12.0f);
+        DrawRectanglePro(outerRec, { 0.0f, outerThick * 0.5f }, deg, Fade(WHITE, pulse));
+    }
+}
+
+void DrawSpeedChevron(Vector2 pos, float dirDeg, bool fast, float timeNow) {
+    float rad = dirDeg * DEG2RAD;
+    Vector2 fwd = { cosf(rad), sinf(rad) };
+    Vector2 right = { -fwd.y, fwd.x };
+    Color col = fast ? Color{ 255, 155, 45, 255 } : Color{ 75, 225, 255, 255 };
+
+    int count = fast ? 2 : 1;
+    for (int k = 0; k < count; k++) {
+        float shift = (fast ? (-6.0f + k * 11.0f) : 0.0f) + 2.5f * sinf(timeNow * 7.0f);
+        Vector2 c = Vector2Add(pos, Vector2Scale(fwd, shift));
+        Vector2 tip = Vector2Add(c, Vector2Scale(fwd, 9.0f));
+        Vector2 w1  = Vector2Add(Vector2Subtract(c, Vector2Scale(fwd, 6.0f)), Vector2Scale(right, 11.0f));
+        Vector2 w2  = Vector2Subtract(Vector2Subtract(c, Vector2Scale(fwd, 6.0f)), Vector2Scale(right, 11.0f));
+        DrawLineEx(w1, tip, 3.5f, col);
+        DrawLineEx(w2, tip, 3.5f, col);
+    }
+}
+
+void DrawSingleTile(size_t i, float timeNow, float segDeg, int remainingStackCount, bool isFirstStackHolder, bool isUTurnTile) {
     float scale = 1.0f + tiles[i].hitAnim * 0.28f;
     bool isCurrent = ((int)i == currentTile);
     bool isNextTarget = ((int)i == currentTile + 1);
@@ -735,57 +830,80 @@ void DrawSingleTile(size_t i, float timeNow, int remainingStackCount, bool isFir
 
     Color rimCol = isCurrent    ? WHITE :
                    isNextTarget ? Color{ 120, 240, 255, 255 } :
-                   tiles[i].cleared ? Color{ 110, 150, 210, 255 } : Color{ 75, 92, 130, 255 };
+                   tiles[i].cleared ? Color{ 115, 158, 225, 255 } : Color{ 75, 92, 130, 255 };
     if (isGoal) rimCol = GOLD;
 
+    // 겹침 타일 하단 스택 표시
     if (remainingStackCount >= 2 && isFirstStackHolder) {
         Vector2 stackOffset = { tiles[i].pos.x - 5.0f, tiles[i].pos.y + 7.0f };
         if (tiles[i].midspin) {
             DrawPoly(stackOffset, 3, 27.0f, timeNow * 70.0f, Fade(GOLD, 0.75f));
         } else {
-            DrawCircleV(stackOffset, 25.5f, Color{ 255, 190, 60, 220 });
-            DrawCircleV(stackOffset, 20.0f, Color{ 35, 32, 48, 255 });
+            Rectangle stRec = { stackOffset.x, stackOffset.y, 48.0f, 48.0f };
+            DrawRectanglePro(stRec, { 24.0f, 24.0f }, segDeg, Color{ 255, 190, 60, 220 });
+            Rectangle stIn  = { stackOffset.x, stackOffset.y, 38.0f, 38.0f };
+            DrawRectanglePro(stIn, { 19.0f, 19.0f }, segDeg, Color{ 35, 32, 48, 255 });
         }
     }
 
     if (tiles[i].midspin) {
-        DrawPoly(tiles[i].pos, 3, 26.5f * scale, timeNow * 70.0f, MAGENTA);
-        DrawPoly(tiles[i].pos, 3, 16.0f * scale, timeNow * 70.0f, { 26, 30, 46, 255 });
+        // 미드스핀 삼각형 타일
+        DrawPoly(tiles[i].pos, 3, 27.5f * scale, timeNow * 70.0f, MAGENTA);
+        DrawPoly(tiles[i].pos, 3, 17.0f * scale, timeNow * 70.0f, { 26, 30, 46, 255 });
     } else {
-        DrawCircleV({ tiles[i].pos.x, tiles[i].pos.y + 4.0f }, 24.0f * scale, Fade(BLACK, 0.40f));
-        DrawCircleV(tiles[i].pos, 25.0f * scale, rimCol);
-        DrawCircleV(tiles[i].pos, 18.0f * scale, isNextTarget ? Color{ 30, 42, 66, 255 } : Color{ 22, 26, 40, 255 });
+        // 진짜 얼불춤의 각진 사각형 연결 노드 타일
+        float outerSz = 50.0f * scale;
+        float innerSz = 38.0f * scale;
+        Rectangle outerBox = { tiles[i].pos.x, tiles[i].pos.y, outerSz, outerSz };
+        Rectangle innerBox = { tiles[i].pos.x, tiles[i].pos.y, innerSz, innerSz };
+
+        DrawRectanglePro(outerBox, { outerSz * 0.5f, outerSz * 0.5f }, segDeg, rimCol);
+        DrawRectanglePro(innerBox, { innerSz * 0.5f, innerSz * 0.5f }, segDeg,
+                         isNextTarget ? Color{ 34, 48, 76, 255 } : Color{ 23, 30, 48, 255 });
     }
 
+    // 다음 타겟 펄스 프레임
     if (isNextTarget) {
-        float pulse = 29.0f + 3.5f * sinf(timeNow * 9.0f);
-        DrawCircleLinesV(tiles[i].pos, pulse, Fade(WHITE, 0.85f));
-        DrawCircleLinesV(tiles[i].pos, pulse + 2.0f, Fade(SKYBLUE, 0.55f));
+        float pulse = 56.0f + 6.0f * sinf(timeNow * 9.0f);
+        Rectangle pRec = { tiles[i].pos.x, tiles[i].pos.y, pulse, pulse };
+        DrawRectanglePro(pRec, { pulse * 0.5f, pulse * 0.5f }, segDeg, Fade(WHITE, 0.22f));
     }
 
+    // 도착 골 포털
     if (isGoal) {
-        DrawRing(tiles[i].pos, 11.0f, 15.0f, timeNow * 140.0f, timeNow * 140.0f + 240.0f, 24, GOLD);
-        DrawCircleV(tiles[i].pos, 7.0f + 2.0f * sinf(timeNow * 6.0f), WHITE);
+        DrawRing(tiles[i].pos, 12.0f, 16.5f, timeNow * 140.0f, timeNow * 140.0f + 240.0f, 24, GOLD);
+        DrawCircleV(tiles[i].pos, 7.5f + 2.0f * sinf(timeNow * 6.0f), WHITE);
     }
 
+    // 소용돌이(회전 방향 반전) 아이콘
     if (tiles[i].swirl) {
-        float rot = timeNow * 200.0f;
-        DrawRing(tiles[i].pos, 9.0f, 13.5f, rot, rot + 140.0f, 16, { 240, 95, 255, 255 });
-        DrawRing(tiles[i].pos, 9.0f, 13.5f, rot + 180.0f, rot + 320.0f, 16, { 240, 95, 255, 255 });
+        float rot = timeNow * 220.0f;
+        DrawRing(tiles[i].pos, 9.5f, 14.0f, rot, rot + 145.0f, 16, { 245, 95, 255, 255 });
+        DrawRing(tiles[i].pos, 9.5f, 14.0f, rot + 180.0f, rot + 325.0f, 16, { 245, 95, 255, 255 });
     }
 
+    // 토끼(가속) / 달팽이(감속) 기믹 아이콘
+    if (tiles[i].speedMult > 1.01f) {
+        DrawSpeedChevron(tiles[i].pos, segDeg, true, timeNow);
+    } else if (tiles[i].speedMult < 0.99f) {
+        DrawSpeedChevron(tiles[i].pos, segDeg + 180.0f, false, timeNow);
+    }
+
+    // 180도 유턴 표시
     if (isUTurnTile && !tiles[i].cleared) {
-        float rot = timeNow * 90.0f;
+        float rot = timeNow * 95.0f;
         DrawRing(tiles[i].pos, 12.0f, 15.5f, rot, rot + 220.0f, 18, ORANGE);
     }
 
+    // 체크포인트 표시
     if (tiles[i].checkpoint && currentMode == MODE_JOURNEY) {
-        DrawCircleLinesV(tiles[i].pos, 29.5f, GREEN);
-        DrawCircleLinesV(tiles[i].pos, 32.5f, Fade(GREEN, 0.45f));
+        DrawCircleLinesV(tiles[i].pos, 29.0f, GREEN);
+        DrawCircleLinesV(tiles[i].pos, 32.0f, Fade(GREEN, 0.45f));
     }
 
+    // 겹침 카운트 배지
     if (remainingStackCount >= 2 && isFirstStackHolder) {
-        Rectangle badge = { tiles[i].pos.x + 12.0f, tiles[i].pos.y - 34.0f, 34.0f, 20.0f };
+        Rectangle badge = { tiles[i].pos.x + 14.0f, tiles[i].pos.y - 36.0f, 34.0f, 20.0f };
         DrawRectangleRounded(badge, 0.45f, 6, GOLD);
         DrawRectangleRoundedLinesEx(badge, 0.45f, 6, 1.5f, BLACK);
         DrawTextCentered(TextFormat("x%d", remainingStackCount), badge.x + 17.0f, badge.y + 2.0f, 14.0f, BLACK, false);
@@ -806,11 +924,12 @@ void DrawPathDirectionArrow(Vector2 p1, Vector2 p2, float tPos, Color col, float
 
 void TriggerGameOver(const std::string& reason, Vector2 effectPos) {
     PlaySound(sndFail);
-    screenShake = 16.0f;
+    screenShake = 18.0f;
+    overloadFlash = 0.85f;
     gameOverTimer = 0.55f;
     failReason = reason;
-    SpawnHitParticles(effectPos, RED, 32);
-    SpawnShockwave(effectPos, RED, 120.0f);
+    SpawnHitParticles(effectPos, RED, 36);
+    SpawnShockwave(effectPos, RED, 135.0f);
     screen = SCR_GAMEOVER;
 }
 
@@ -827,16 +946,18 @@ void StartGame(int startFromTile = 0) {
     if (currentMode == MODE_ENDLESS) {
         tiles.clear();
         Vector2 startPos = { 0.0f, 0.0f };
-        tiles.push_back({ startPos, false, false, false, true, 0.0f });
+        tiles.push_back({ startPos, false, false, false, 1.0f, true, 0.0f });
         endlessBuildPivot = startPos;
         endlessTilesCleared = 0;
-        currentBpm = 122.0f;
+        baseBpm = 120.0f;
+        currentBpm = baseBpm;
         bgHue = 185.0f;
         AppendEndlessTiles(40);
         startFromTile = 0;
     } else {
         BuildTilesFromSteps(GetWorldSteps(selectedWorld));
-        currentBpm = worlds[selectedWorld].bpm;
+        baseBpm = worlds[selectedWorld].bpm;
+        currentBpm = baseBpm;
         bgHue = worlds[selectedWorld].hue;
     }
 
@@ -850,11 +971,13 @@ void StartGame(int startFromTile = 0) {
     accuracySum = 0.0f;
     failReason = "";
     gameOverTimer = 0.0f;
+    overloadFlash = 0.0f;
 
     Vector2 prevPiv = { 0, 0 };
     for (int i = 0; i <= startFromTile; i++) {
         tiles[i].cleared = true;
         if (i > 0 && tiles[i].swirl) cw = !cw;
+        if (tiles[i].speedMult != 1.0f) currentBpm = baseBpm * tiles[i].speedMult;
         if (!tiles[i].midspin) {
             if (i > 0) prevPiv = pivotPos;
             pivotPos = tiles[i].pos;
@@ -863,7 +986,8 @@ void StartGame(int startFromTile = 0) {
 
     SetupOrbitForTile(startFromTile, prevPiv);
 
-    countdownBeats = 4;
+    // 실제 얼불춤 카운트다운: "준비!" -> "3" -> "2" -> "1" -> "시작!"
+    countdownBeats = 5;
     beatTimer = 0.0f;
     totalBeatCount = 0;
     cameraBeatPulse = 0.06f;
@@ -875,7 +999,6 @@ void StartGame(int startFromTile = 0) {
     PlaySound(sndKick);
 }
 
-// Z, X, C, V 포함 모든 리듬 타격 키 입력 감지
 bool IsHitKeyPressed() {
     return IsKeyPressed(KEY_SPACE) ||
            IsKeyPressed(KEY_Z) || IsKeyPressed(KEY_X) || IsKeyPressed(KEY_C) || IsKeyPressed(KEY_V) ||
@@ -917,7 +1040,7 @@ void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
                 }
             }
             PlaySound(sndClear);
-            SpawnShockwave(hitTilePos, GOLD, 160.0f);
+            SpawnShockwave(hitTilePos, GOLD, 165.0f);
             screen = SCR_CLEAR;
         } else {
             Vector2 oldPivot = pivotPos;
@@ -932,6 +1055,8 @@ void AdvanceTileAfterHit(Vector2 hitTilePos, bool wasMissInZen = false) {
 void UpdateAndDrawFrame() {
     float dt = GetFrameTime();
     if (dt > 0.05f) dt = 0.05f;
+
+    if (overloadFlash > 0.0f) overloadFlash = fmaxf(0.0f, overloadFlash - 2.2f * dt);
 
     for (auto& m : motes) {
         m.pos = Vector2Add(m.pos, Vector2Scale(m.vel, dt));
@@ -1056,12 +1181,13 @@ void UpdateAndDrawFrame() {
                 beatTimer -= beatDuration;
                 countdownBeats--;
                 totalBeatCount++;
-                cameraBeatPulse = 0.045f;
+                cameraBeatPulse = 0.048f;
 
                 if (countdownBeats > 0) {
                     PlaySound(totalBeatCount % 2 == 0 ? sndKick : sndSnare);
                 } else {
                     traveledAngle = 0.0f;
+                    AddPopup("시작!", pivotPos, GOLD);
                     PlaySound(sndKick);
                     int wIdx = (currentMode == MODE_ENDLESS) ? 2 : selectedWorld;
                     PlaySound(sndMelody[worlds[wIdx].instrumentType][worlds[wIdx].melodyNotes[0]]);
@@ -1085,7 +1211,7 @@ void UpdateAndDrawFrame() {
                 PlaySound(sndMelody[inst][noteIdx]);
 
                 if (totalBeatCount % 2 == 0) {
-                    cameraBeatPulse = 0.036f;
+                    cameraBeatPulse = 0.038f;
                     PlaySound(beat4 % 2 == 0 ? sndKick : sndSnare);
                     if (beat4 % 2 == 0) {
                         PlaySound(sndBass[worlds[wIdx].bassNotes[beat4]]);
@@ -1137,8 +1263,8 @@ void UpdateAndDrawFrame() {
 
                         Vector2 hitTilePos = tiles[currentTile + 1].pos;
                         AddPopup(jText, hitTilePos, jCol);
-                        SpawnHitParticles(hitTilePos, isFirePivot ? SKYBLUE : ORANGE, 18);
-                        SpawnShockwave(hitTilePos, jCol, 72.0f);
+                        SpawnHitParticles(hitTilePos, isFirePivot ? SKYBLUE : ORANGE, 20);
+                        SpawnShockwave(hitTilePos, jCol, 76.0f);
                         PlaySound(sndHit);
 
                         screenShake = 4.5f;
@@ -1147,6 +1273,7 @@ void UpdateAndDrawFrame() {
                 } else {
                     if (currentMode == MODE_ZEN) {
                         screenShake = 8.0f;
+                        overloadFlash = 0.35f;
                         streakCount = 0;
                         AddPopup("너무 빠름!", pivotPos, ORANGE);
                     } else {
@@ -1209,10 +1336,10 @@ void UpdateAndDrawFrame() {
         icePos  = isFirePivot ? orbitPos : pivotPos;
 
         if (screen == SCR_PLAYING || screen == SCR_COUNTDOWN) {
-            fireTrail.push_back({ firePos, { 255, 80, 45, 255 }, 0.78f });
-            iceTrail.push_back({ icePos, { 45, 205, 255, 255 }, 0.78f });
-            if (fireTrail.size() > 24) fireTrail.pop_front();
-            if (iceTrail.size() > 24) iceTrail.pop_front();
+            fireTrail.push_back({ firePos, { 255, 80, 45, 255 }, 0.82f });
+            iceTrail.push_back({ icePos, { 45, 205, 255, 255 }, 0.82f });
+            if (fireTrail.size() > 26) fireTrail.pop_front();
+            if (iceTrail.size() > 26) iceTrail.pop_front();
         }
     }
 
@@ -1374,7 +1501,7 @@ void UpdateAndDrawFrame() {
             DrawRectangleRounded({ rx + 75.0f + d * 35.0f, 246.0f, 29.0f, 18.0f }, 0.3f, 4, segCol);
         }
 
-        DrawTextUI(TextFormat("음악: %s (%.0f BPM 고정)", w.songStyle, w.bpm), rx, 290.0f, 18.0f, LIGHTGRAY);
+        DrawTextUI(TextFormat("음악: %s (%.0f BPM)", w.songStyle, w.bpm), rx, 290.0f, 18.0f, LIGHTGRAY);
         DrawTextUI(TextFormat("코스: %s", w.gimmickDesc), rx, 325.0f, 17.5f, LIGHTGRAY);
 
         if (w.cleared) {
@@ -1409,34 +1536,34 @@ void UpdateAndDrawFrame() {
 
         std::vector<Vector2> segStart(tiles.size());
         std::vector<Vector2> segEnd(tiles.size());
+        std::vector<float>   tileDeg(tiles.size(), 0.0f);
         Vector2 renderPivot = tiles[0].pos;
         for (size_t i = 0; i + 1 < tiles.size(); i++) {
             segStart[i] = renderPivot;
             segEnd[i]   = tiles[i + 1].pos;
+            float deg = atan2f(segEnd[i].y - segStart[i].y, segEnd[i].x - segStart[i].x) * RAD2DEG;
+            tileDeg[i] = deg;
+            if (i + 1 == tiles.size() - 1) tileDeg[i + 1] = deg;
             if (!tiles[i + 1].midspin) {
                 renderPivot = tiles[i + 1].pos;
             }
         }
 
-        // [1단계] 지나간 길 & 미래의 길
+        // [1단계] 지나간 길 & 미래의 길 (각진 사각 도로)
         for (size_t i = 0; i + 1 < tiles.size(); i++) {
             if ((int)i == currentTile) continue;
             Vector2 p1 = segStart[i];
             Vector2 p2 = segEnd[i];
 
             if (tiles[i + 1].midspin) {
-                DrawDashedGlowLine(p1, p2, Fade(MAGENTA, tiles[i].cleared ? 0.30f : 0.70f));
+                DrawDashedGlowLine(p1, p2, Fade(MAGENTA, tiles[i].cleared ? 0.30f : 0.75f));
                 continue;
             }
 
-            Color borderCol = tiles[i].cleared ? Color{ 85, 118, 170, 175 } : Color{ 62, 78, 118, 235 };
-            Color coreCol   = tiles[i].cleared ? Color{ 32, 46, 72, 195 }  : Color{ 24, 31, 50, 240 };
-            DrawLineEx({ p1.x, p1.y + 6.0f }, { p2.x, p2.y + 6.0f }, 50.0f, Fade(BLACK, 0.28f));
-            DrawLineEx(p1, p2, 48.0f, borderCol);
-            DrawLineEx(p1, p2, 34.0f, coreCol);
+            DrawAdofaiRoadSegment(p1, p2, tiles[i].cleared, false, isFirePivot, timeNow);
 
             if ((int)i > currentTile && (int)i <= currentTile + 3) {
-                DrawPathDirectionArrow(p1, p2, 0.52f, Fade(WHITE, 0.26f), 8.0f);
+                DrawPathDirectionArrow(p1, p2, 0.52f, Fade(WHITE, 0.28f), 8.0f);
             }
         }
 
@@ -1447,21 +1574,20 @@ void UpdateAndDrawFrame() {
             if (tiles[currentTile + 1].midspin) {
                 DrawDashedGlowLine(p1, p2, MAGENTA);
             } else {
-                Color activeGlow = isFirePivot ? SKYBLUE : ORANGE;
-                DrawLineEx(p1, p2, 52.0f, Fade(activeGlow, 0.45f));
-                DrawLineEx(p1, p2, 44.0f, Color{ 44, 62, 95, 255 });
+                DrawAdofaiRoadSegment(p1, p2, true, true, isFirePivot, timeNow);
                 float flow = fmodf(timeNow * 1.4f, 1.0f);
-                DrawPathDirectionArrow(p1, p2, 0.25f + flow * 0.5f, Fade(WHITE, 0.80f), 10.0f);
+                DrawPathDirectionArrow(p1, p2, 0.25f + flow * 0.5f, Fade(WHITE, 0.85f), 10.0f);
             }
         }
 
-        DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.18f));
+        // 공전 궤도 및 남은 각도 호
+        DrawCircleLinesV(pivotPos, TILE_DIST, Fade(WHITE, 0.20f));
         if (screen == SCR_PLAYING) {
             float remRatio = Clamp(1.0f - (traveledAngle / targetDiff), 0.0f, 1.0f);
             float startDeg = currentAngle * RAD2DEG;
             float endDeg   = (currentAngle + (cw ? 1.0f : -1.0f) * targetDiff * remRatio) * RAD2DEG;
             DrawRing(pivotPos, TILE_DIST - 6.0f, TILE_DIST + 2.0f, startDeg, endDeg, 24,
-                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.26f));
+                     Fade(isFirePivot ? SKYBLUE : ORANGE, 0.30f));
         }
 
         std::vector<int> remainingStack(tiles.size(), 1);
@@ -1493,18 +1619,18 @@ void UpdateAndDrawFrame() {
         for (size_t i = 0; i < tiles.size(); i++) {
             if ((int)i == currentTile || (int)i == currentTile + 1) continue;
             if (!tiles[i].cleared) continue;
-            DrawSingleTile(i, timeNow, remainingStack[i], firstStackHolder[i], isUTurn[i]);
+            DrawSingleTile(i, timeNow, tileDeg[i], remainingStack[i], firstStackHolder[i], isUTurn[i]);
         }
         for (size_t i = 0; i < tiles.size(); i++) {
             if ((int)i == currentTile || (int)i == currentTile + 1) continue;
             if (tiles[i].cleared) continue;
-            DrawSingleTile(i, timeNow, remainingStack[i], firstStackHolder[i], isUTurn[i]);
+            DrawSingleTile(i, timeNow, tileDeg[i], remainingStack[i], firstStackHolder[i], isUTurn[i]);
         }
         if (currentTile >= 0 && currentTile < (int)tiles.size()) {
-            DrawSingleTile((size_t)currentTile, timeNow, remainingStack[currentTile], firstStackHolder[currentTile], isUTurn[currentTile]);
+            DrawSingleTile((size_t)currentTile, timeNow, tileDeg[currentTile], remainingStack[currentTile], firstStackHolder[currentTile], isUTurn[currentTile]);
         }
         if (currentTile + 1 >= 0 && currentTile + 1 < (int)tiles.size()) {
-            DrawSingleTile((size_t)(currentTile + 1), timeNow, remainingStack[currentTile + 1], firstStackHolder[currentTile + 1], isUTurn[currentTile + 1]);
+            DrawSingleTile((size_t)(currentTile + 1), timeNow, tileDeg[currentTile + 1], remainingStack[currentTile + 1], firstStackHolder[currentTile + 1], isUTurn[currentTile + 1]);
         }
 
         for (const auto& sw : shockwaves) {
@@ -1524,19 +1650,27 @@ void UpdateAndDrawFrame() {
             DrawCircleV(pt.pos, pt.size * (pt.life / pt.maxLife), Fade(pt.color, pt.life / pt.maxLife));
         }
 
-        DrawCircleV(firePos, PLANET_RADIUS + 8.0f, Fade(ORANGE, 0.25f));
+        // 불 행성 (다층 글로우 + 코어)
+        DrawCircleV(firePos, PLANET_RADIUS + 10.0f, Fade(ORANGE, 0.25f));
+        DrawCircleLinesV(firePos, PLANET_RADIUS + 4.0f, Fade(GOLD, 0.55f));
         DrawCircleV(firePos, PLANET_RADIUS, { 255, 65, 45, 255 });
-        DrawCircleV(firePos, PLANET_RADIUS * 0.48f, { 255, 220, 150, 255 });
+        DrawCircleV(firePos, PLANET_RADIUS * 0.52f, { 255, 225, 160, 255 });
 
-        DrawCircleV(icePos, PLANET_RADIUS + 8.0f, Fade(SKYBLUE, 0.25f));
+        // 얼음 행성 (다층 글로우 + 수정 코어)
+        DrawCircleV(icePos, PLANET_RADIUS + 10.0f, Fade(SKYBLUE, 0.25f));
+        DrawCircleLinesV(icePos, PLANET_RADIUS + 4.0f, Fade(WHITE, 0.55f));
         DrawCircleV(icePos, PLANET_RADIUS, { 45, 195, 255, 255 });
-        DrawCircleV(icePos, PLANET_RADIUS * 0.48f, { 215, 248, 255, 255 });
+        DrawCircleV(icePos, PLANET_RADIUS * 0.52f, { 220, 250, 255, 255 });
 
         for (const auto& p : popups) {
             DrawTextCentered(p.text.c_str(), p.pos.x, p.pos.y, 20.0f, Fade(p.color, Clamp(p.timer * 1.4f, 0.0f, 1.0f)));
         }
     }
     EndMode2D();
+
+    if (overloadFlash > 0.0f) {
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(RED, overloadFlash * 0.35f));
+    }
 
     // --- 상단 HUD ---
     float accPct = (hitCount > 0) ? (accuracySum / hitCount * 100.0f) : 100.0f;
@@ -1550,7 +1684,7 @@ void UpdateAndDrawFrame() {
 
         DrawRectangleRounded({ 28.0f, 52.0f, 260.0f, 12.0f }, 0.5f, 4, Fade(WHITE, 0.15f));
         DrawRectangleRounded({ 28.0f, 52.0f, 260.0f * ratio, 12.0f }, 0.5f, 4, ColorFromHSV(bgHue, 0.65f, 0.95f));
-        DrawTextUI(TextFormat("%d%%   •   정확도: %.1f%%", (int)(ratio * 100.0f), accPct), 300.0f, 48.0f, 18.0f, LIGHTGRAY);
+        DrawTextUI(TextFormat("%d%%   •   정확도: %.1f%%   •   BPM: %.0f", (int)(ratio * 100.0f), accPct, currentBpm), 300.0f, 48.0f, 18.0f, LIGHTGRAY);
     }
 
     Rectangle menuBtn = { 1130.0f, 18.0f, 120.0f, 38.0f };
@@ -1580,10 +1714,12 @@ void UpdateAndDrawFrame() {
     }
 
     if (screen == SCR_COUNTDOWN) {
-        const char* cdText = (countdownBeats == 3) ? "3" :
-                             (countdownBeats == 2) ? "2" :
-                             (countdownBeats == 1) ? "1" : "준비!";
-        DrawTextCentered(cdText, SCREEN_WIDTH / 2.0f, 135.0f, 64.0f, GOLD);
+        const char* cdText = (countdownBeats == 5) ? "준비!" :
+                             (countdownBeats == 4) ? "3" :
+                             (countdownBeats == 3) ? "2" :
+                             (countdownBeats == 2) ? "1" : "준비!";
+        Color cdCol = (countdownBeats == 5 || countdownBeats == 1) ? SKYBLUE : GOLD;
+        DrawTextCentered(cdText, SCREEN_WIDTH / 2.0f, 135.0f, 64.0f, cdCol);
     }
     else if (screen == SCR_GAMEOVER) {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.70f));
@@ -1640,8 +1776,8 @@ int main() {
     }
     if (audioReady) {
         UnloadSound(sndHit); UnloadSound(sndKick); UnloadSound(sndSnare);
-        UnloadSound(sndHat); UnloadSound(sndSwirl); UnloadSound(sndFail);
-        UnloadSound(sndClear);
+        UnloadSound(sndHat); UnloadSound(sndSwirl); UnloadSound(sndSpeedUp);
+        UnloadSound(sndSlowDown); UnloadSound(sndFail); UnloadSound(sndClear);
         for (int inst = 0; inst < 6; inst++) {
             for (int n = 0; n < 18; n++) UnloadSound(sndMelody[inst][n]);
         }
